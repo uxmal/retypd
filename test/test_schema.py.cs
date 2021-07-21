@@ -1,46 +1,49 @@
 // Simple unit tests from the paper and slides.
 // 
 
-using ABC = abc.ABC;
+/*using ABC = abc.ABC;
 
 using networkx;
 
 using unittest;
 
-using ConstraintSet = retypd.ConstraintSet;
+*/
+using ConstraintSet = schema.ConstraintSet;
 
-using SchemaParser = retypd.SchemaParser;
+using SchemaParser = parser.SchemaParser;
 
-using Solver = retypd.Solver;
+using Solver = solver.Solver;
 
 using System.Collections.Generic;
 
 using System.Collections;
+using NUnit.Framework;
+using schema;
+using System.Linq;
 
 public static class test_schema {
     
+    [TestFixture]
     public class SchemaTest
-        : ABC {
+        {
         
-        public virtual void graphs_are_equal(object graph, Dictionary<object, object> edge_set) {
-            var edges = graph.edges();
-            this.assertEqual(edges.Count, edge_set.Count);
-            foreach (var edge in edges) {
-                (head, tail) = edge;
-                this.assertTrue(edge_set.Contains(edge));
-                this.assertEqual(graph[head][tail], edge_set[edge]);
+        public virtual void graphs_are_equal(networkx.DiGraph<Node> graph, Dictionary<(Node,Node), Hashtable> edge_set) {
+            var edges = graph.edges().ToArray();
+            Assert.Equals(edges.Length, edge_set.Count);
+            foreach (var (head,tail) in edges) {
+                Assert.IsTrue(edge_set.ContainsKey(edge));
+                Assert.Equals(graph[head][tail], edge_set[edge]);
             }
         }
         
         // Convert a collection of edge strings into a dict. Used for comparing a graph against an
         //         expected value.
         //         
-        [staticmethod]
-        public static Dictionary<object, object> edges_to_dict(object edges) {
-            var graph = new Dictionary<object, object> {
+        public static Dictionary<(Node, Node), Hashtable> edges_to_dict(IEnumerable<string> edges) {
+            var graph = new Dictionary<(Node, Node), Hashtable> {
             };
             foreach (var edge in edges) {
-                (head, tail, atts) = SchemaParser.parse_edge(edge);
+                var (head, tail, atts) = SchemaParser.parse_edge(edge);
                 graph[(head, tail)] = atts;
             }
             return graph;
@@ -48,20 +51,19 @@ public static class test_schema {
     }
     
     public class BasicSchemaTest
-        : SchemaTest, unittest.TestCase {
+        : SchemaTest{
         
         // A simple test from the paper (the right side of Figure 4 on p. 6). This one has no
         //         recursive data structures; as such, the fixed point would suffice. However, we compute type
         //         constraints in the same way as in the presence of recursion.
         //         
+        [Test]
         public virtual void test_simple_constraints() {
-            var constraints = ConstraintSet();
+            var constraints = new ConstraintSet();
             constraints.add(SchemaParser.parse_constraint("p ⊑ q"));
             constraints.add(SchemaParser.parse_constraint("x ⊑ q.store.σ4@0"));
             constraints.add(SchemaParser.parse_constraint("p.load.σ4@0 ⊑ y"));
-            var solver = Solver(constraints, new HashSet({
-                "x"}, {
-                "y"}));
+            var solver = new Solver(constraints, new HashSet<string>{ "x", "y"});
             solver._add_forget_recall_edges();
             var forget_recall = new List<string> {
                 "p.load.⊕        ->  p.⊕              (forget load)",
@@ -128,25 +130,23 @@ public static class test_schema {
             };
             var saturated_graph = SchemaTest.edges_to_dict(saturated);
             this.graphs_are_equal(solver.constraint_graph.graph, saturated_graph);
-            solver.graph = networkx.DiGraph(solver.constraint_graph.graph);
+            solver.graph = new networkx.DiGraph<Node>(solver.constraint_graph.graph);
             solver._remove_self_loops();
             solver._generate_type_vars();
             solver._unforgettable_subgraph_split();
             solver._generate_constraints();
-            this.assertTrue(solver.constraints.Contains(SchemaParser.parse_constraint("x ⊑ y")));
+            Assert.IsTrue(solver.constraints.Contains(SchemaParser.parse_constraint("x ⊑ y")));
         }
         
         // Another simple test from the paper (the program modeled in Figure 14 on p. 26).
         //         
         public virtual void test_other_simple_constraints() {
-            var constraints = ConstraintSet();
+            var constraints = new ConstraintSet();
             constraints.add(SchemaParser.parse_constraint("y <= p"));
             constraints.add(SchemaParser.parse_constraint("p <= x"));
             constraints.add(SchemaParser.parse_constraint("A <= x.store"));
             constraints.add(SchemaParser.parse_constraint("y.load <= B"));
-            var solver = Solver(constraints, new HashSet({
-                "A"}, {
-                "B"}));
+            var solver = new Solver(constraints, new HashSet<string> { "A", "B" });
             solver._add_forget_recall_edges();
             var forget_recall = new List<string> {
                 "A.⊕        →  x.store.⊕",
@@ -195,23 +195,23 @@ public static class test_schema {
             };
             var saturated_graph = SchemaTest.edges_to_dict(saturated);
             this.graphs_are_equal(solver.constraint_graph.graph, saturated_graph);
-            solver.graph = networkx.DiGraph(solver.constraint_graph.graph);
+            solver.graph = new networkx.DiGraph<Node>(solver.constraint_graph.graph);
             solver._remove_self_loops();
             solver._generate_type_vars();
             solver._unforgettable_subgraph_split();
             solver._generate_constraints();
-            this.assertTrue(solver.constraints.Contains(SchemaParser.parse_constraint("A ⊑ B")));
+            Assert.IsTrue(solver.constraints.Contains(SchemaParser.parse_constraint("A ⊑ B")));
         }
     }
     
     public class RecursiveSchemaTest
-        : SchemaTest, unittest.TestCase {
+        : SchemaTest {
         
         // A test based on the running example from the paper (Figure 2 on p. 3) and the slides
         //         (slides 67-83, labeled as slides 13-15).
         //         
         public virtual void test_recursive() {
-            var constraints = ConstraintSet();
+            var constraints = new ConstraintSet();
             constraints.add(SchemaParser.parse_constraint("F.in_0 ⊑ δ"));
             constraints.add(SchemaParser.parse_constraint("α ⊑ φ"));
             constraints.add(SchemaParser.parse_constraint("δ ⊑ φ"));
@@ -221,10 +221,10 @@ public static class test_schema {
             constraints.add(SchemaParser.parse_constraint("close.out ⊑ F.out"));
             constraints.add(SchemaParser.parse_constraint("close.in_0 ⊑ #FileDescriptor"));
             constraints.add(SchemaParser.parse_constraint("#SuccessZ ⊑ close.out"));
-            var solver = Solver(constraints, new HashSet({
-                "F"}, {
-                "#FileDescriptor"}, {
-                "#SuccessZ"}));
+            var solver = new Solver(constraints, new HashSet<string> {
+                "F",
+                "#FileDescriptor",
+                "#SuccessZ"});
             solver._add_forget_recall_edges();
             var forget_recall = new List<string> {
                 "close.⊕            →  close.in_0.⊖        (recall in_0)",
@@ -339,22 +339,22 @@ public static class test_schema {
                 "φ.⊖                →  φ.load.⊖            (recall load)"
             };
             this.graphs_are_equal(solver.constraint_graph.graph, SchemaTest.edges_to_dict(saturated));
-            solver.graph = networkx.DiGraph(solver.constraint_graph.graph);
+            solver.graph = new networkx.DiGraph<Node>(solver.constraint_graph.graph);
             solver._remove_self_loops();
             solver._generate_type_vars();
             solver._unforgettable_subgraph_split();
             solver._generate_constraints();
             var tv = solver.lookup_type_var("φ");
-            this.assertTrue(solver.constraints.Contains(SchemaParser.parse_constraint("#SuccessZ ⊑ F.out")));
-            this.assertTrue(solver.constraints.Contains(SchemaParser.parse_constraint("F.in_0 ⊑ {tv}")));
-            this.assertTrue(solver.constraints.Contains(SchemaParser.parse_constraint("{tv}.load.σ4@0 ⊑ {tv}")));
-            this.assertTrue(solver.constraints.Contains(SchemaParser.parse_constraint("{tv}.load.σ4@4 ⊑ #FileDescriptor")));
+            Assert.IsTrue(solver.constraints.Contains(SchemaParser.parse_constraint("#SuccessZ ⊑ F.out")));
+            Assert.IsTrue(solver.constraints.Contains(SchemaParser.parse_constraint($"F.in_0 ⊑ {tv}")));
+            Assert.IsTrue(solver.constraints.Contains(SchemaParser.parse_constraint($"{tv}.load.σ4@0 ⊑ {tv}")));
+            Assert.IsTrue(solver.constraints.Contains(SchemaParser.parse_constraint($"{tv}.load.σ4@4 ⊑ #FileDescriptor")));
         }
         
         // Same as the preceding test, but end-to-end.
         //         
         public virtual void test_end_to_end() {
-            var constraints = ConstraintSet();
+            var constraints = new ConstraintSet ();
             constraints.add(SchemaParser.parse_constraint("F.in_0 ⊑ δ"));
             constraints.add(SchemaParser.parse_constraint("α ⊑ φ"));
             constraints.add(SchemaParser.parse_constraint("δ ⊑ φ"));
@@ -364,20 +364,16 @@ public static class test_schema {
             constraints.add(SchemaParser.parse_constraint("close.out ⊑ F.out"));
             constraints.add(SchemaParser.parse_constraint("close.in_0 ⊑ #FileDescriptor"));
             constraints.add(SchemaParser.parse_constraint("#SuccessZ ⊑ close.out"));
-            var solver = Solver(constraints, new HashSet({
-                "F"}, {
-                "#FileDescriptor"}, {
-                "#SuccessZ"}));
-            solver();
+            var solver = new Solver(constraints, new HashSet<string>{
+                "F",
+                "#FileDescriptor",
+                "#SuccessZ" });
+            solver.__call__();
             var tv = solver.lookup_type_var("φ");
-            this.assertTrue(solver.constraints.Contains(SchemaParser.parse_constraint("#SuccessZ ⊑ F.out")));
-            this.assertTrue(solver.constraints.Contains(SchemaParser.parse_constraint("F.in_0 ⊑ {tv}")));
-            this.assertTrue(solver.constraints.Contains(SchemaParser.parse_constraint("{tv}.load.σ4@0 ⊑ {tv}")));
-            this.assertTrue(solver.constraints.Contains(SchemaParser.parse_constraint("{tv}.load.σ4@4 ⊑ #FileDescriptor")));
+            Assert.IsTrue(solver.constraints.Contains(SchemaParser.parse_constraint("#SuccessZ ⊑ F.out")));
+            Assert.IsTrue(solver.constraints.Contains(SchemaParser.parse_constraint("F.in_0 ⊑ {tv}")));
+            Assert.IsTrue(solver.constraints.Contains(SchemaParser.parse_constraint("{tv}.load.σ4@0 ⊑ {tv}")));
+            Assert.IsTrue(solver.constraints.Contains(SchemaParser.parse_constraint("{tv}.load.σ4@4 ⊑ #FileDescriptor")));
         }
-    }
-    
-    static test_schema() {
-        unittest.main();
     }
 }

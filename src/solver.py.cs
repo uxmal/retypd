@@ -1,4 +1,4 @@
-
+/*
 using Dict = typing.Dict;
 
 using List = typing.List;
@@ -28,10 +28,13 @@ using StoreLabel = schema.StoreLabel;
 using SubtypeConstraint = schema.SubtypeConstraint;
 
 using Variance = schema.Variance;
-
+*/
 using SchemaParser = parser.SchemaParser;
+using schema;
 
+/*
 using os;
+*/
 
 using networkx;
 
@@ -42,6 +45,8 @@ using System.Collections.Generic;
 using System.Linq;
 
 using System;
+using retypd.schema;
+using System.IO;
 
 public static class solver {
     
@@ -54,10 +59,10 @@ public static class solver {
     //     
     public class ConstraintGraph {
         
-        public networkx.DiGraph graph;
+        public networkx.DiGraph<Node> graph;
         
         public ConstraintGraph(ConstraintSet constraints) {
-            this.graph = new networkx.DiGraph();
+            this.graph = new networkx.DiGraph<Node>();
             foreach (var constraint in constraints.subtype) {
                 this.add_edges(constraint.left, constraint.right);
             }
@@ -66,9 +71,9 @@ public static class solver {
         // Add an edge to the graph. The optional atts dict should include, if anything, a mapping
         //         from the string 'label' to an EdgeLabel object.
         //         
-        public virtual bool add_edge(Node head, Node tail, Hashtable atts) {
+        public virtual bool add_edge(Node head, Node tail, Hashtable? atts = null) {
             if (!this.graph.Contains(head) || !this.graph[head].Contains(tail)) {
-                this.graph.add_edge(head, tail, atts);
+                this.graph.add_edge(head, tail, atts ?? new Hashtable());
                 return true;
             }
             return false;
@@ -78,8 +83,8 @@ public static class solver {
         //         
         public virtual bool add_edges(DerivedTypeVariable sub , DerivedTypeVariable sup , Hashtable atts) {
             var changed = false;
-            var forward_from = Node(sub, Variance.COVARIANT);
-            var forward_to = Node(sup, Variance.COVARIANT);
+            var forward_from = new Node(sub, Variance.COVARIANT);
+            var forward_to = new Node(sup, Variance.COVARIANT);
             changed = this.add_edge(forward_from, forward_to, atts) || changed;
             var backward_from = forward_to.inverse();
             var backward_to = forward_from.inverse();
@@ -90,13 +95,14 @@ public static class solver {
         // Add forget and recall nodes to the graph. Step 4 in the notes.
         //         
         public virtual void add_forget_recall() {
-            var existing_nodes = new HashSet<object>(this.graph.nodes);
-            foreach (var node in existing_nodes) {
-                (capability, prefix) = node.forget_once();
-                while (prefix) {
-                    this.graph.add_edge(node, prefix, label: EdgeLabel(capability, EdgeLabel.Kind.FORGET));
-                    this.graph.add_edge(prefix, node, label: EdgeLabel(capability, EdgeLabel.Kind.RECALL));
-                    var node = prefix;
+            var existing_nodes = new HashSet<Node>(this.graph.nodes);
+            foreach (var n in existing_nodes) {
+                var node = n;
+                var (capability, prefix) = node.forget_once();
+                while (prefix is not null) {
+                    this.graph.add_edge(node, prefix, label: new EdgeLabel(capability!, EdgeLabel.Kind.FORGET));
+                    this.graph.add_edge(prefix, node, label: new EdgeLabel(capability!, EdgeLabel.Kind.RECALL));
+                    node = prefix;
                     (capability, prefix) = node.forget_once();
                 }
             }
@@ -105,77 +111,67 @@ public static class solver {
         // Add "shortcut" edges, per algorithm D.2 in the paper.
         //         
         public virtual void saturate() {
-            object origin_z;
-            object capability_l;
-            object label;
-            object tail_y;
-            object head_x;
             var changed = false;
-            var reaching_R = new Dictionary<object, object> {
-            };
-            Func<object, object, object> add_forgets = (dest,forgets) => {
-                //LOCAL changed
-                if (!reaching_R.Contains(dest) || !(forgets <= reaching_R[dest])) {
-                    var changed = true;
-                    reaching_R.setdefault(dest, new HashSet<object>()).update(forgets);
+            var reaching_R = new Dictionary<Node, HashSet<(AccessPathLabel, Node)>> { };
+            void add_forgets(Node dest, HashSet<(AccessPathLabel, Node)> forgets) {
+                if (!reaching_R.ContainsKey(dest) || !(forgets <= reaching_R[dest])) {
+                    changed = true;
+                    if (!reaching_R.TryGetValue(dest, out var fs)) {
+                        fs = new HashSet<(AccessPathLabel, Node)>();
+                        reaching_R.Add(dest, fs);
+                    }
+                    fs.UnionWith(forgets);
                 }
             };
-            Func<object, object, object> add_edge = (origin,dest) => {
-                //LOCAL changed
-                var changed = this.add_edge(origin, dest) || changed;
+            void add_edge(Node origin, Node dest)  {
+                changed = this.add_edge(origin, dest) || changed;
             };
-            Func<object, object> is_contravariant = node => {
+            bool is_contravariant(Node node) {
                 return node.suffix_variance == Variance.CONTRAVARIANT;
             };
-            foreach (var _tup_1 in this.graph.edges) {
-                head_x = _tup_1.Item1;
-                tail_y = _tup_1.Item2;
-                label = this.graph[head_x][tail_y].get("label");
+            foreach (var (head_x, tail_y) in this.graph.edges) {
+                var label = this.graph[head_x][tail_y].get("label");
                 if (label && label.kind == EdgeLabel.Kind.FORGET) {
-                    add_forgets(tail_y, new HashSet({
-                        (label.capability, head_x)}));
+                    add_forgets(tail_y, new HashSet{
+                        (label.capability, head_x)});
                 }
             }
             while (changed) {
                 changed = false;
-                foreach (var _tup_2 in this.graph.edges) {
-                    head_x = _tup_2.Item1;
-                    tail_y = _tup_2.Item2;
+                foreach (var (head_x, tail_y) in this.graph.edges) {
                     if (!this.graph[head_x][tail_y].get("label")) {
                         add_forgets(tail_y, reaching_R.get(head_x, new HashSet<object>()));
                     }
                 }
                 var existing_edges = this.graph.edges.ToList();
-                foreach (var _tup_3 in existing_edges) {
-                    head_x = _tup_3.Item1;
-                    tail_y = _tup_3.Item2;
-                    label = this.graph[head_x][tail_y].get("label");
+                foreach (var (head_x, tail_y) in existing_edges) {
+                    var label = this.graph[head_x][tail_y].get("label");
                     if (label && label.kind == EdgeLabel.Kind.RECALL) {
-                        capability_l = label.capability;
+                        var capability_l = label.capability;
                         foreach (var _tup_4 in reaching_R.get(head_x, new HashSet<object>())) {
                             label = _tup_4.Item1;
-                            origin_z = _tup_4.Item2;
+                            var origin_z = _tup_4.Item2;
                             if (label == capability_l) {
                                 add_edge(origin_z, tail_y);
                             }
                         }
                     }
                 }
-                var contravariant_vars = this.graph.nodes.Where(is_contravariant).ToList().ToList();
+                var contravariant_vars = this.graph.nodes.Where(is_contravariant).ToList();
                 foreach (var x in contravariant_vars) {
-                    foreach (var _tup_5 in reaching_R.get(x, new HashSet<object>())) {
-                        capability_l = _tup_5.Item1;
-                        origin_z = _tup_5.Item2;
-                        label = null;
-                        if (capability_l == StoreLabel.instance()) {
-                            label = LoadLabel.instance();
+                    if (!reaching_R.TryGetValue(x, out var set))
+                        continue;
+                    foreach (var (capability_l, origin_z) in set) {
+                        AccessPathLabel? label = null;
+                        if (capability_l == StoreLabel.instance) {
+                            label = LoadLabel.instance;
                         }
-                        if (capability_l == LoadLabel.instance()) {
-                            label = StoreLabel.instance();
+                        if (capability_l == LoadLabel.instance) {
+                            label = StoreLabel.instance;
                         }
-                        if (label) {
-                            add_forgets(x.inverse(), new HashSet({
-                                (label, origin_z)}));
+                        if (label is not null) {
+                            add_forgets(x.inverse(), new HashSet {
+                                (label, origin_z)});
                         }
                     }
                 }
@@ -184,12 +180,11 @@ public static class solver {
         
         // A helper for __str__ that formats an edge
         //         
-        [staticmethod]
-        public static string edge_to_str(object graph, object edge = Tuple[Node,Node]) {
-            var width = 2 + max(map(v => v.ToString().Count, graph.nodes));
-            (sub, sup) = edge;
+        public static string edge_to_str(networkx.DiGraph<Node> graph, (Node,Node) edge) {
+            var width = 2 + graph.nodes.Select(v => v.ToString().Length).Max();
+            var (sub, sup) = edge;
             var label = graph[sub][sup].get("label");
-            var edge_str = "{str(sub):<{width}}→  {str(sup):<{width}}";
+            var edge_str = $"{sub:width}→  {sup:{width}}";
             if (label) {
                 return edge_str + " ({label})";
             } else {
@@ -197,41 +192,38 @@ public static class solver {
             }
         }
         
-        [staticmethod]
-        public static string graph_to_dot(object name = str, ConstraintGraph graph = networkx.DiGraph) {
-            var nt = os.linesep + "\t";
-            Func<object, object> edge_to_str = edge => {
-                (sub, sup) = edge;
+        public static string graph_to_dot(string name, networkx.DiGraph<Node> graph) {
+            var nt = Environment.NewLine + "\t";
+            static string edge_to_str((Node,Node) edge) {
+                var (sub, sup) = edge;
                 var label = graph[sub][sup].get("label");
                 var label_str = "";
                 if (label) {
-                    label_str = " [label=\"{label}\"]";
+                    label_str = $" [label=\"{label}\"]";
                 }
-                return "\"{sub}\" -> \"{sup}\"{label_str};";
+                return $"\"{sub}\" -> \"{sup}\"{label_str};";
             };
-            Func<object, object> node_to_str = node => {
-                return "\"{node}\";";
+            static string node_to_str(Node node) {
+                return $"\"{node}\";";
             };
-            return "digraph {name} {{{nt}{nt.join(map(node_to_str, graph.nodes))}{nt}{nt.join(map(edge_to_str, graph.edges))}{os.linesep}}}";
+            return $"digraph {name} {{{nt}{string.Join(nt, graph.nodes.Select(node_to_str))}{nt}{string.Join(nt, graph.edges.Select(edge_to_str))}{Environment.NewLine}}}";
         }
         
-        [staticmethod]
-        public static void write_to_dot(object name = str, object graph = networkx.DiGraph) {
-            using (var dotfile = open("{name}.dot", "w")) {
-                Console.WriteLine(ConstraintGraph.graph_to_dot(name, graph), file: dotfile);
+        public static void write_to_dot(string name , networkx.DiGraph<Node> graph) {
+            using (var dotfile = File.CreateText($"{name}.dot")) {
+                dotfile.WriteLine(ConstraintGraph.graph_to_dot(name, graph));
             }
         }
         
-        [staticmethod]
-        public static string graph_to_str(object graph = networkx.DiGraph) {
-            var nt = os.linesep + "\t";
-            var edge_to_str = edge => ConstraintGraph.edge_to_str(graph, edge);
-            return "{nt.join(map(edge_to_str, graph.edges))}";
+        public static string graph_to_str(networkx.DiGraph<Node> graph) {
+            var nt = Environment.NewLine + "\t";
+            string edge_to_str((Node,Node)edge) => ConstraintGraph.edge_to_str(graph, edge);
+            return $"{string.Join(nt, graph.edges.Select(edge_to_str))}";
         }
         
         public override string ToString() {
-            var nt = os.linesep + "\t";
-            return "ConstraintGraph:{nt}{ConstraintGraph.graph_to_str(self.graph)}";
+            var nt = Environment.NewLine + "\t";
+            return $"ConstraintGraph:{nt}{ConstraintGraph.graph_to_str(this.graph)}";
         }
     }
     
@@ -241,32 +233,34 @@ public static class solver {
     //     
     public class Solver {
         
-        public Dictionary<object, object> _type_vars;
+        public Dictionary<DerivedTypeVariable, DerivedTypeVariable> _type_vars;
         
         public ConstraintGraph constraint_graph;
         
-        public object constraints;
+        public HashSet<SubtypeConstraint> constraints;
         
-        public object graph;
+        public DiGraph<Node> graph;
         
-        public void interesting;
+        // C# doesn't have union types or this would be:
+        // IEnumerable<Union(DerivedTypeVariable, string)>
+        public HashSet<DerivedTypeVariable> interesting;
         
         public int next;
         
-        public Solver(object constraints = ConstraintSet, object interesting = Iterable[Union[DerivedTypeVariable,str]]) {
+        public Solver(ConstraintSet constraints, IEnumerable<object> interesting) {
             this.constraint_graph = new ConstraintGraph(constraints);
-            this.interesting = new HashSet<object>();
+            this.interesting = new HashSet<DerivedTypeVariable>();
             foreach (var var in interesting) {
-                if (var is str) {
-                    this.interesting.add(DerivedTypeVariable(var));
+                if (var is string sVar) {
+                    this.interesting.Add(new DerivedTypeVariable(sVar));
                 } else {
-                    this.interesting.add(var);
+                    this.interesting.Add((DerivedTypeVariable) var);
                 }
             }
             this.next = 0;
-            this.constraints = new HashSet<object>();
-            this._type_vars = new Dictionary<object, object> {
-            };
+            this.constraints = new HashSet<SubtypeConstraint>();
+            this._type_vars = new Dictionary<DerivedTypeVariable, DerivedTypeVariable> {};
+            this.graph = default!;
         }
         
         // Passes through to ConstraintGraph.add_forget_recall()
@@ -289,10 +283,8 @@ public static class solver {
         //         edge.
         //         
         public virtual void _unforgettable_subgraph_split() {
-            var edges = new HashSet<object>(this.graph.edges);
-            foreach (var _tup_1 in edges) {
-                var head = _tup_1.Item1;
-                var tail = _tup_1.Item2;
+            var edges = new HashSet<(Node,Node)>(this.graph.edges);
+            foreach (var (head,tail) in edges) {
                 var label = this.graph[head][tail].get("label");
                 if (label && label.kind == EdgeLabel.Kind.FORGET) {
                     continue;
@@ -311,7 +303,7 @@ public static class solver {
         // Take a string, convert it to a DerivedTypeVariable, and if there is a type variable that
         //         stands in for a prefix of it, change the prefix to the type variable.
         //         
-        public virtual void lookup_type_var(Func<object> var_str = str) {
+        public virtual DerivedTypeVariable lookup_type_var(string var_str) {
             var var = SchemaParser.parse_variable(var_str);
             return this._get_type_var(var);
         }
@@ -320,12 +312,12 @@ public static class solver {
         //         appropriate variable by adding the leftover part of the suffix. If not, return the variable
         //         as passed in.
         //         
-        public virtual void _get_type_var(object var = DerivedTypeVariable) {
-            foreach (var expanded in this._type_vars.OrderByDescending(_p_1 => _p_1).ToList()) {
+        public virtual DerivedTypeVariable _get_type_var(DerivedTypeVariable var) {
+            foreach (var expanded in this._type_vars.Keys.OrderByDescending(_p_1 => _p_1).ToList()) {
                 var suffix = expanded.get_suffix(var);
                 if (suffix != null) {
                     var type_var = this._type_vars[expanded];
-                    return DerivedTypeVariable(type_var.@base, suffix);
+                    return new DerivedTypeVariable(type_var.@base, suffix);
                 }
             }
             return var;
@@ -334,35 +326,32 @@ public static class solver {
         // Retrieve or generate a type variable. Automatically adds this variable to the set of
         //         interesting variables.
         //         
-        public virtual void _make_type_var(object @base = DerivedTypeVariable) {
-            if (this._type_vars.Contains(@base)) {
+        public virtual void _make_type_var(DerivedTypeVariable @base) {
+            if (this._type_vars.ContainsKey(@base)) {
                 return;
             }
-            var var = DerivedTypeVariable("τ_{self.next}");
+            var var = new DerivedTypeVariable($"τ_{this.next}");
             this._type_vars[@base] = var;
-            this.interesting.add(@base);
+            this.interesting.Add(@base);
             this.next += 1;
         }
         
         // Return a set of elements from variables for which no prefix exists in variables. For
         //         example, if variables were the set {A, A.load}, return the set {A}.
         //         
-        [staticmethod]
-        public static void _filter_no_prefix(object variables = Iterable[DerivedTypeVariable]) {
-            var selected = new HashSet<object>();
+        public static HashSet<DerivedTypeVariable> _filter_no_prefix(IEnumerable<DerivedTypeVariable> variables) {
+            var selected = new HashSet<DerivedTypeVariable>();
             var candidates = variables.OrderByDescending(_p_1 => _p_1).ToList();
-            foreach (var _tup_1 in candidates.Select((_p_2,_p_3) => Tuple.Create(_p_3, _p_2))) {
-                var index = _tup_1.Item1;
-                var candidate = _tup_1.Item2;
+            foreach (var (index, candidate) in candidates.Select((_p_2,_p_3) => (_p_3, _p_2))) {
                 var emit = true;
-                foreach (var other in candidates[index + 1]) {
-                    if (other.get_suffix(candidate)) {
+                foreach (var other in candidates.Skip(index + 1)) {
+                    if (other.get_suffix(candidate) is not null) {
                         emit = false;
                         break;
                     }
                 }
                 if (emit) {
-                    selected.add(candidate);
+                    selected.Add(candidate);
                 }
             }
             return selected;
@@ -384,11 +373,9 @@ public static class solver {
         //         candidate.
         //         
         public virtual void _generate_type_vars() {
-            var forget_graph = networkx.DiGraph(this.graph);
-            var recall_graph = networkx.DiGraph(this.graph);
-            foreach (var _tup_1 in this.graph.edges) {
-                var head = _tup_1.Item1;
-                var tail = _tup_1.Item2;
+            var forget_graph = new networkx.DiGraph<Node>(this.graph);
+            var recall_graph = new networkx.DiGraph<Node>(this.graph);
+            foreach (var (head, tail) in this.graph.edges) {
                 var label = this.graph[head][tail].get("label");
                 if (label) {
                     if (label.kind == EdgeLabel.Kind.FORGET) {
@@ -398,7 +385,7 @@ public static class solver {
                     }
                 }
             }
-            var loop_breakers = new HashSet<object>();
+            var loop_breakers = new HashSet<DerivedTypeVariable>();
             foreach (var graph in new List<object> {
                 forget_graph,
                 recall_graph
@@ -406,9 +393,9 @@ public static class solver {
                 var condensation = networkx.condensation(graph);
                 var visited = new HashSet<object>();
                 foreach (var scc_node in reversed(networkx.topological_sort(condensation).ToList())) {
-                    var candidates = new HashSet<object>();
-                    var scc = condensation.nodes[scc_node]["members"];
-                    visited.add(scc_node);
+                    var candidates = new HashSet<DerivedTypeVariable>();
+                    var scc = (List<Node>) condensation.nodes[scc_node]["members"];
+                    visited.Add(scc_node);
                     if (scc.Count == 1) {
                         continue;
                     }
@@ -416,13 +403,13 @@ public static class solver {
                         foreach (var predecessor in this.graph.predecessors(node)) {
                             var scc_index = condensation.graph["mapping"][predecessor];
                             if (!visited.Contains(scc_index)) {
-                                candidates.add(node.@base);
+                                candidates.Add(node.@base);
                             }
                         }
                     }
                     candidates = Solver._filter_no_prefix(candidates);
-                    loop_breakers |= candidates;
-                    this.interesting |= candidates;
+                    loop_breakers.UnionWith(candidates);
+                    this.interesting.UnionWith(candidates);
                 }
             }
             loop_breakers = Solver._filter_no_prefix(loop_breakers);
@@ -434,26 +421,31 @@ public static class solver {
         // Find all non-empty paths from origin to nodes that represent interesting type variables.
         //         Return the list of labels encountered along the way as well as the destination reached.
         //         
-        public virtual object _find_paths(object origin = Node, object path = new List<object>(), object @string = new List<object>()) {
-            if (path && this.interesting.Contains(origin.@base)) {
-                return new List<Tuple<List<object>, object>> {
+        public virtual List<(List<EdgeLabel>,Node)> _find_paths(
+            Node origin,
+            List<Node>? path = null,
+            List<EdgeLabel>? @string = null) {
+            path ??= new List<Node>();
+            @string ??= new List<EdgeLabel>();
+            if (path.Count > 0 && this.interesting.Contains(origin.@base)) {
+                return new List<(List<EdgeLabel>, Node)> {
                     (@string, origin)
                 };
             }
             if (path.Contains(origin)) {
-                return new List<object>();
+                return new List<(List<EdgeLabel>, Node)>();
             }
             path = path.ToList();
-            path.append(origin);
-            var all_paths = new List<object>();
+            path.Add(origin);
+            var all_paths = new List<(List<EdgeLabel>, Node)>();
             if (this.graph.Contains(origin)) {
-                foreach (var succ in this.graph[origin]) {
+                foreach (var succ in this.graph.successors(origin)) {
                     var label = this.graph[origin][succ].get("label");
                     var new_string = @string.ToList();
                     if (label) {
-                        new_string.append(label);
+                        new_string.Add(label);
                     }
-                    all_paths += this._find_paths(succ, path, new_string);
+                    all_paths.AddRange(this._find_paths(succ, path, new_string));
                 }
             }
             return all_paths;
@@ -464,7 +456,7 @@ public static class solver {
         //         covariant, so only covariant vertices can represent a derived type variable without an
         //         elided portion of its path) and if the two variables are not equal, emit a constraint.
         //         
-        public virtual void _maybe_add_constraint(object origin = Node, object dest = Node, object @string = List[EdgeLabel]) {
+        public virtual void _maybe_add_constraint(Node origin, Node dest, List<EdgeLabel> @string) {
             var lhs = origin;
             var rhs = dest;
             foreach (var label in @string) {
@@ -478,8 +470,8 @@ public static class solver {
                 var lhs_var = this._get_type_var(lhs.@base);
                 var rhs_var = this._get_type_var(rhs.@base);
                 if (lhs_var != rhs_var) {
-                    var constraint = SubtypeConstraint(lhs_var, rhs_var);
-                    this.constraints.add(constraint);
+                    var constraint = new SubtypeConstraint(lhs_var, rhs_var);
+                    this.constraints.Add(constraint);
                 }
             }
         }
@@ -490,9 +482,7 @@ public static class solver {
         public virtual void _generate_constraints() {
             foreach (var node in this.graph.nodes) {
                 if (this.interesting.Contains(node.@base)) {
-                    foreach (var _tup_1 in this._find_paths(node)) {
-                        var @string = _tup_1.Item1;
-                        var dest = _tup_1.Item2;
+                    foreach (var (@string,dest) in this._find_paths(node)) {
                         this._maybe_add_constraint(node, dest, @string);
                     }
                 }
@@ -508,10 +498,10 @@ public static class solver {
         
         // Perform the retypd calculation.
         //         
-        public virtual void @__call__() {
+        public virtual HashSet<SubtypeConstraint> @__call__() {
             this._add_forget_recall_edges();
             this._saturate();
-            this.graph = networkx.DiGraph(this.constraint_graph.graph);
+            this.graph = new networkx.DiGraph<Node>(this.constraint_graph.graph);
             this._remove_self_loops();
             this._generate_type_vars();
             this._unforgettable_subgraph_split();

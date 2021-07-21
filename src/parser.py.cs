@@ -1,4 +1,4 @@
-
+/*
 using re;
 
 using AccessPathLabel = schema.AccessPathLabel;
@@ -26,13 +26,14 @@ using Node = schema.Node;
 using Dict = typing.Dict;
 
 using Tuple = typing.Tuple;
-
+*/
 using System;
 
 using System.Linq;
 
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
+using schema;
 
 public static class parser {
     
@@ -46,124 +47,111 @@ public static class parser {
     //     
     public class SchemaParser {
         
-        public object deref_pattern;
+        public static readonly Regex subtype_pattern = new Regex(@"(\S*) (?:⊑|<=) (\S*)");
         
-        public object edge_pattern;
+        public static readonly Regex in_pattern = new Regex("in_([0-9]+)");
         
-        public object in_pattern;
+        public static readonly Regex deref_pattern = new Regex("σ([0-9]+)@([0-9]+)");
         
-        public object node_pattern;
+        public static readonly Regex node_pattern = new Regex(@"(\S+)\.([⊕⊖])");
         
-        public object subtype_pattern;
+        public static readonly Regex edge_pattern = new Regex(@"(\S+)\s+(?:→|->)\s+(\S+)(\s+\((forget|recall) (\S*)\))?");
         
-        public object whitespace_pattern;
-        
-        public Regex subtype_pattern = new Regex(@"(\S*) (?:⊑|<=) (\S*)");
-        
-        public Regex in_pattern = new Regex("in_([0-9]+)");
-        
-        public Regex deref_pattern = new Regex("σ([0-9]+)@([0-9]+)");
-        
-        public Regex node_pattern = new Regex(@"(\S+)\.([⊕⊖])");
-        
-        public Regex edge_pattern = new Regex(@"(\S+)\s+(?:→|->)\s+(\S+)(\s+\((forget|recall) (\S*)\))?");
-        
-        public Regex whitespace_pattern = new Regex(@"\s");
+        public static readonly Regex whitespace_pattern = new Regex(@"\s");
         
         // Parse an AccessPathLabel. Raises ValueError if it is improperly formatted.
         //         
-        public static void parse_label(object label = str) {
+        public static AccessPathLabel parse_label(string label) {
             if (label == "load") {
-                return LoadLabel.instance();
+                return LoadLabel.instance;
             }
             if (label == "store") {
-                return StoreLabel.instance();
+                return StoreLabel.instance;
             }
             if (label == "out") {
-                return OutLabel.instance();
+                return OutLabel.instance;
             }
-            var in_match = SchemaParser.in_pattern.match(label);
-            if (in_match) {
-                return InLabel(Convert.ToInt32(in_match.group(1)));
+            var in_match = SchemaParser.in_pattern.Match(label);
+            if (in_match.Success) {
+                return new InLabel(Convert.ToInt32(in_match.Groups[1].Value));
             }
-            var deref_match = SchemaParser.deref_pattern.match(label);
-            if (deref_match) {
-                return DerefLabel(Convert.ToInt32(deref_match.group(1)), Convert.ToInt32(deref_match.group(2)));
+            var deref_match = SchemaParser.deref_pattern.Match(label);
+            if (deref_match.Success) {
+                return new DerefLabel(
+                    Convert.ToInt32(deref_match.Groups[1].Value), 
+                    Convert.ToInt32(deref_match.Groups[2].Value));
             }
-            throw new ValueError();
+            throw new FormatException();
         }
         
         // Parse a DerivedTypeVariable. Raises ValueError if the string contains whitespace.
         //         
-        [staticmethod]
-        public static void parse_variable(object var = str) {
-            if (SchemaParser.whitespace_pattern.match(var)) {
-                throw new ValueError();
+        public static DerivedTypeVariable parse_variable(string var) {
+            if (SchemaParser.whitespace_pattern.IsMatch(var)) {
+                throw new FormatException();
             }
-            var components = var.split(".");
-            var path = (from label in components[1]
-                select SchemaParser.parse_label(label)).ToList();
-            return DerivedTypeVariable(components[0], path);
+            var components = var.Split(".");
+            var path = (from label in components[1..]
+                select SchemaParser.parse_label(label)).ToArray();
+            return new DerivedTypeVariable(components[0], path);
         }
         
         // Parse a SubtypeConstraint. Raises a ValueError if constraint does not match
         //         SchemaParser.subtype_pattern.
         //         
-        [staticmethod]
-        public static void parse_constraint(object constraint = str) {
-            var subtype_match = SchemaParser.subtype_pattern.match(constraint);
-            if (subtype_match) {
-                return SubtypeConstraint(SchemaParser.parse_variable(subtype_match.group(1)), SchemaParser.parse_variable(subtype_match.group(2)));
+        public static SubtypeConstraint parse_constraint(string constraint) {
+            var subtype_match = SchemaParser.subtype_pattern.Match(constraint);
+            if (subtype_match.Success) {
+                return new SubtypeConstraint(
+                    SchemaParser.parse_variable(subtype_match.Groups[1].Value),
+                    SchemaParser.parse_variable(subtype_match.Groups[2].Value));
             }
-            throw new ValueError();
+            throw new FormatException();
         }
         
         // Parse a Node. Raise a ValueError if it does not match SchemaParser.node_pattern.
         //         
-        [staticmethod]
-        public static void parse_node(object node = str) {
-            object variance;
-            var node_match = SchemaParser.node_pattern.match(node);
-            if (node_match) {
-                var var = SchemaParser.parse_variable(node_match.group(1));
-                if (node_match.group(2) == "⊕") {
+        public static Node parse_node(string node) {
+            Variance variance;
+            var node_match = SchemaParser.node_pattern.Match(node);
+            if (node_match.Success) {
+                var var = SchemaParser.parse_variable(node_match.Groups[1].Value);
+                if (node_match.Groups[2].Value == "⊕") {
                     variance = Variance.COVARIANT;
-                } else if (node_match.group(2) == "⊖") {
+                } else if (node_match.Groups[2].Value == "⊖") {
                     variance = Variance.CONTRAVARIANT;
                 } else {
-                    throw new ValueError();
+                    throw new FormatException();
                 }
-                return Node(var, variance);
+                return new Node(var, variance);
             }
-            throw new ValueError();
+            throw new FormatException();
         }
         
         // Parse an edge in the graph, which consists of two nodes and an arrow, with an optional
         //         edge label.
         //         
-        [staticmethod]
-        public static Tuple<object, object, Dictionary<object, object>> parse_edge(object edge = str) {
-            object kind;
-            var edge_match = SchemaParser.edge_pattern.match(edge);
-            if (edge_match) {
-                var sub = SchemaParser.parse_node(edge_match.group(1));
-                var sup = SchemaParser.parse_node(edge_match.group(2));
-                var atts = new Dictionary<object, object> {
-                };
-                if (edge_match.group(3)) {
-                    var capability = SchemaParser.parse_label(edge_match.group(5));
-                    if (edge_match.group(4) == "forget") {
+        public static (object, object, Dictionary<string, object>) parse_edge(string edge) {
+            EdgeLabel.Kind kind;
+            var edge_match = SchemaParser.edge_pattern.Match(edge);
+            if (edge_match.Success) {
+                var sub = SchemaParser.parse_node(edge_match.Groups[1].Value);
+                var sup = SchemaParser.parse_node(edge_match.Groups[2].Value);
+                var atts = new Dictionary<string, object> { };
+                if (edge_match.Groups[3].Success) {
+                    var capability = SchemaParser.parse_label(edge_match.Groups[5].Value);
+                    if (edge_match.Groups[4].Value == "forget") {
                         kind = EdgeLabel.Kind.FORGET;
-                    } else if (edge_match.group(4) == "recall") {
+                    } else if (edge_match.Groups[4].Value == "recall") {
                         kind = EdgeLabel.Kind.RECALL;
                     } else {
-                        throw new ValueError();
+                        throw new FormatException();
                     }
-                    atts["label"] = EdgeLabel(capability, kind);
+                    atts["label"] = new EdgeLabel(capability, kind);
                 }
                 return (sub, sup, atts);
             }
-            throw new ValueError();
+            throw new FormatException();
         }
     }
 }

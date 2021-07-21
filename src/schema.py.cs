@@ -1,4 +1,4 @@
-
+/*
 using ABC = abc.ABC;
 
 using Enum = @enum.Enum;
@@ -22,12 +22,13 @@ using Tuple = typing.Tuple;
 using logging;
 
 using os;
-
+*/
 using System.Linq;
 
 using System.Collections.Generic;
+using System;
 
-namespace retypd.schema {
+namespace schema {
 
         // Data types for an implementation of retypd analysis.
 
@@ -81,7 +82,7 @@ namespace retypd.schema {
         //         otherwise. Several of the subclasses are singletons, so we return False unless there is a
         //         need for an overriding implementation.
         //         
-        public virtual bool _less_than(string _other) {
+        public virtual bool _less_than(AccessPathLabel _other) {
             return false;
         }
         
@@ -159,7 +160,8 @@ namespace retypd.schema {
             return other is InLabel that && this.index == that.index;
         }
         
-        public override bool _less_than(InLabel other) {
+        public override bool _less_than(AccessPathLabel that) {
+            var other = (InLabel)that;
             return this.index < other.index;
         }
         
@@ -181,27 +183,16 @@ namespace retypd.schema {
     public class OutLabel
         : AccessPathLabel {
         
-        public object _instance;
+        public static OutLabel instance = new OutLabel();
         
-        public void _instance = null;
-        
-        public OutLabel() {
-            throw new ValueError("Can't instantiate; call instance() instead");
+        private OutLabel() {
         }
         
-        [classmethod]
-        public static void instance(object cls) {
-            if (cls._instance == null) {
-                cls._instance = cls.@__new__(cls);
-            }
-            return cls._instance;
-        }
-        
-        public virtual OutLabel @__eq__(object other = Any) {
+        public override bool Equals(object other) {
             return object.ReferenceEquals(this, other);
         }
         
-        public virtual int @__hash__() {
+        public override int GetHashCode() {
             return 2;
         }
         
@@ -216,32 +207,33 @@ namespace retypd.schema {
     public class DerefLabel
         : AccessPathLabel {
         
-        public object offset;
+        public int offset;
         
-        public object size;
+        public int size;
         
-        public DerefLabel(Func<object> size = @int, Func<object> offset = @int) {
+        public DerefLabel(int size, int offset) {
             this.size = size;
             this.offset = offset;
         }
         
-        public virtual object @__eq__(object other = Any) {
-            return other is DerefLabel && this.size == other.size && this.offset == other.offset;
+        public override bool Equals(object? other) {
+            return other is DerefLabel that && this.size == that.size && this.offset == that.offset;
         }
         
-        public virtual bool _less_than(string other = "DerefLabel") {
+        public override bool _less_than(AccessPathLabel that) {
+            var other = (DerefLabel)that;
             if (this.offset == other.offset) {
                 return this.size < other.size;
             }
             return this.offset < other.offset;
         }
         
-        public virtual int @__hash__() {
-            return hash(this.offset) ^ hash(this.size);
+        public override int GetHashCode() {
+            return this.offset.GetHashCode() ^ this.size.GetHashCode();
         }
         
         public override string ToString() {
-            return "σ{self.size}@{self.offset}";
+            return $"σ{this.size}@{this.offset}";
         }
     }
     
@@ -249,47 +241,61 @@ namespace retypd.schema {
     //     
     public class DerivedTypeVariable {
         
-        public object _str;
+        public string _str;
         
-        public object @base;
+        public string @base;
         
-        public tuple path;
-        
-        public DerivedTypeVariable(object type_var = str, list path = null) {
+        public AccessPathLabel[] path;
+
+        public DerivedTypeVariable(string type_var, AccessPathLabel[]? path = null) {
             this.@base = type_var;
             if (path == null) {
-                this.path = ValueTuple.Create("<Empty>");
+                this.path = Array.Empty<AccessPathLabel>();
             } else {
-                this.path = tuple(path);
+                this.path = path.ToArray();
             }
-            if (this.path) {
-                this._str = "{self.base}.{\".\".join(map(str, self.path))}";
+            if (this.path.Length > 0) {
+                this._str = $"{this.@base}.{string.Join<AccessPathLabel>(".", this.path)}";
             } else {
                 this._str = this.@base;
             }
         }
         
-        public virtual object @__eq__(object other = Any) {
-            return other is DerivedTypeVariable && this.@base == other.@base && this.path == other.path;
+        public override bool Equals(object? that) {
+            return that is DerivedTypeVariable other && this.@base == other.@base && this.path == other.path;
         }
         
-        public virtual bool @__lt__(string other = "DerivedTypeVariable") {
-            if (this.@base == other.@base) {
-                return this.path.ToList() < other.path.ToList();
+        public static bool operator < (DerivedTypeVariable self, DerivedTypeVariable other) {
+            int d = self.@base.CompareTo(other.@base);
+            if (d == 0) {
+                d = self.path.Length.CompareTo(other.path.Length);
+                if (d == 0)
+                {
+                    for (int i = 0; i < self.path.Length; ++i)
+                    {
+                        if (self.path[i] < other.path[i])
+                            return true;
+                        else if (self.path[i] > other.path[i])
+                            return false;
+                    }
+                    return false;
+                }
             }
-            return this.@base < other.@base;
+            return d < 0;
         }
-        
-        public virtual int @__hash__() {
-            return hash(this.@base) ^ hash(this.path);
+
+        public static bool operator >(DerivedTypeVariable a, DerivedTypeVariable b) =>
+            b < a;
+        public override int GetHashCode() {
+            return this.@base.GetHashCode() ^ this.path.GetHashCode();
         }
         
         // Return the prefix obtained by removing the last item from the type variable's path. If
         //         there is no path, return None.
         //         
-        public virtual DerivedTypeVariable largest_prefix() {
-            if (this.path) {
-                return new DerivedTypeVariable(this.@base, this.path[:: - 1]);
+        public virtual DerivedTypeVariable? largest_prefix() {
+            if (this.path.Length > 0) {
+                return new DerivedTypeVariable(this.@base, this.path[0..^1]);
             }
             return null;
         }
@@ -297,29 +303,27 @@ namespace retypd.schema {
         // If self is a prefix of other, return the suffix of other's path that is not part of self.
         //         Otherwise, return None.
         //         
-        public virtual void get_suffix(string other = "DerivedTypeVariable") {
+        public virtual AccessPathLabel[]? get_suffix(DerivedTypeVariable other) {
             if (this.@base != other.@base) {
                 return null;
             }
-            if (this.path.Count > other.path.Count) {
+            if (this.path.Length > other.path.Length) {
                 return null;
             }
-            foreach (var _tup_1 in zip(this.path, other.path)) {
-                var s_item = _tup_1.Item1;
-                var o_item = _tup_1.Item2;
+            foreach (var (s_item, o_item) in this.path.Zip(other.path)) {
                 if (s_item != o_item) {
                     return null;
                 }
             }
-            return other.path[this.path.Count];
+            return other.path[this.path.Length..];
         }
         
         // Retrieve the last item in the access path, if any. Return None if
         //         the path is empty.
         //         
-        public virtual void tail() {
-            if (this.path) {
-                return this.path[-1];
+        public virtual AccessPathLabel? tail() {
+            if (this.path.Length > 0) {
+                return this.path[^1];
             }
             return null;
         }
@@ -327,17 +331,19 @@ namespace retypd.schema {
         // Create a new :py:class:`DerivedTypeVariable` identical to :param:`self` (which is
         //         unchanged) but with suffix appended to its path.
         //         
-        public virtual DerivedTypeVariable add_suffix(AccessPathLabel suffix = AccessPathLabel) {
+        public virtual DerivedTypeVariable add_suffix(AccessPathLabel suffix) {
             var path = this.path.ToList();
-            path.append(suffix);
-            return new DerivedTypeVariable(this.@base, path);
+            path.Add(suffix);
+            return new DerivedTypeVariable(this.@base, path.ToArray());
         }
         
         // If :param:`prefix` is a prefix of :param:`self` with exactly one additional
         //         :py:class:`AccessPathLabel`, return the additional label. If not, return `None`.
         //         
-        public virtual void get_single_suffix(string prefix = "DerivedTypeVariable") {
-            if (this.@base != prefix.@base || this.path.Count != prefix.path.Count + 1 || this.path[:: - 1] != prefix.path) {
+        public virtual AccessPathLabel? get_single_suffix(DerivedTypeVariable prefix) {
+            if (this.@base != prefix.@base || 
+                this.path.Length != prefix.path.Length+ 1 ||
+                Enumerable.SequenceEqual(this.path[0..^1], prefix.path)) {
                 return null;
             }
             return this.tail();
@@ -345,12 +351,12 @@ namespace retypd.schema {
         
         // Determine the variance of the access path.
         //         
-        public virtual void path_variance() {
-            var variances = map(label => label.variance(), this.path);
-            return reduce(Variance.combine, variances, Variance.COVARIANT);
+        public virtual Variance path_variance() {
+            var variances = this.path.Select(label => label.variance());
+            return variances.Aggregate(Variance.COVARIANT, VarianceExtensions.combine);
         }
         
-        public override object ToString() {
+        public override string ToString() {
             return this._str;
         }
     }
@@ -359,32 +365,35 @@ namespace retypd.schema {
     //     
     public class SubtypeConstraint {
         
-        public object left;
+        public DerivedTypeVariable left;
         
-        public object right;
+        public DerivedTypeVariable right;
         
-        public SubtypeConstraint(object left = DerivedTypeVariable, object right = DerivedTypeVariable) {
+        public SubtypeConstraint(DerivedTypeVariable left, DerivedTypeVariable right) {
             this.left = left;
             this.right = right;
         }
         
-        public virtual object @__eq__(object other = Any) {
-            return other is SubtypeConstraint && this.left == other.left && this.right == other.right;
+        public override bool Equals(object that) {
+            return that is SubtypeConstraint other && this.left == other.left && this.right == other.right;
         }
         
-        public virtual bool @__lt__(string other = "SubtypeConstraint") {
-            if (this.left == other.left) {
-                return this.right < other.right;
+        public static bool operator < (SubtypeConstraint self, SubtypeConstraint other) {
+            if (self.left == other.left) {
+                return self.right < other.right;
             }
-            return this.left < other.left;
+            return self.left < other.left;
         }
+
+        public static bool operator >(SubtypeConstraint self, SubtypeConstraint other) =>
+            other < self;
         
-        public virtual int @__hash__() {
-            return hash(this.left) ^ hash(this.right);
+        public override int GetHashCode() {
+            return this.left.GetHashCode() ^ this.right.GetHashCode();
         }
         
         public override string ToString() {
-            return "{self.left} ⊑ {self.right}";
+            return $"{this.left} ⊑ {this.right}";
         }
     }
     
@@ -392,37 +401,37 @@ namespace retypd.schema {
     //     
     public class ConstraintSet {
         
-        public object logger;
+        // public object logger;
         
-        public object subtype;
+        public HashSet<SubtypeConstraint> subtype;
         
-        public ConstraintSet(void subtype = null) {
-            if (subtype) {
-                this.subtype = new HashSet<object>(subtype);
+        public ConstraintSet(IEnumerable<SubtypeConstraint>? subtype = null) {
+            if (subtype != null) {
+                this.subtype = new HashSet<SubtypeConstraint>(subtype);
             } else {
-                this.subtype = new HashSet<object>();
+                this.subtype = new HashSet<SubtypeConstraint>();
             }
-            this.logger = logging.getLogger("ConstraintSet");
+            // this.logger = logging.getLogger("ConstraintSet");
         }
         
         // Add a subtype constraint
         //         
-        public virtual bool add_subtype(DerivedTypeVariable left = DerivedTypeVariable, DerivedTypeVariable right = DerivedTypeVariable) {
+        public virtual bool add_subtype(DerivedTypeVariable left, DerivedTypeVariable right) {
             var constraint = new SubtypeConstraint(left, right);
             return this.add(constraint);
         }
         
-        public virtual bool add(object constraint = SubtypeConstraint) {
+        public virtual bool add(SubtypeConstraint constraint) {
             if (this.subtype.Contains(constraint)) {
                 return false;
             }
-            this.subtype.add(constraint);
+            this.subtype.Add(constraint);
             return true;
         }
         
         public override string ToString() {
-            var nt = os.linesep + "\t";
-            return "ConstraintSet:{nt}{nt.join(map(str,self.subtype))}";
+            var nt = Environment.NewLine + "\t";
+            return $"ConstraintSet:{nt}{string.Join(nt, this.subtype)}";
         }
     }
     
@@ -434,23 +443,18 @@ namespace retypd.schema {
         
         public string _str;
         
-        public object capability;
+        public AccessPathLabel capability;
         
-        public object kind;
+        public Kind kind;
         
-        public class Kind
-            : Enum {
+        public enum Kind {
             
-            public int FORGET;
+            FORGET = 1,
             
-            public int RECALL;
-            
-            public int FORGET = 1;
-            
-            public int RECALL = 2;
+            RECALL = 2,
         }
         
-        public EdgeLabel(AccessPathLabel capability = AccessPathLabel, Kind kind = Kind) {
+        public EdgeLabel(AccessPathLabel capability, Kind kind) {
             object type_str;
             this.capability = capability;
             this.kind = kind;
@@ -459,15 +463,15 @@ namespace retypd.schema {
             } else {
                 type_str = "recall";
             }
-            this._str = "{type_str} {self.capability}";
-            this._hash = hash(this.capability) ^ hash(this.kind);
+            this._str = $"{type_str} {this.capability}";
+            this._hash = this.capability.GetHashCode() ^ this.kind.GetHashCode();
         }
         
-        public virtual object @__eq__(object other = Any) {
-            return other is EdgeLabel && this.capability == other.capability && this.kind == other.kind;
+        public override bool Equals(object? that) {
+            return that is EdgeLabel other && this.capability == other.capability && this.kind == other.kind;
         }
         
-        public virtual int @__hash__() {
+        public override int GetHashCode() {
             return this._hash;
         }
         
@@ -487,27 +491,21 @@ namespace retypd.schema {
         
         public string _str;
         
-        public object _unforgettable;
+        public Unforgettable _unforgettable;
         
-        public object @base;
+        public DerivedTypeVariable @base;
         
-        public object suffix_variance;
+        public Variance suffix_variance;
         
-        public class Unforgettable
-            : Enum {
+        public enum Unforgettable {
             
-            public int POST_RECALL;
-            
-            public int PRE_RECALL;
-            
-            public int PRE_RECALL = 0;
-            
-            public int POST_RECALL = 1;
+            PRE_RECALL = 0,
+            POST_RECALL = 1,
         }
         
-        public Node(DerivedTypeVariable @base = DerivedTypeVariable, int suffix_variance = Variance, int unforgettable = Unforgettable.PRE_RECALL) {
-            object summary;
-            object variance;
+        public Node(DerivedTypeVariable @base, Variance suffix_variance, Unforgettable unforgettable = Unforgettable.PRE_RECALL) {
+            int summary;
+            string variance;
             this.@base = @base;
             this.suffix_variance = suffix_variance;
             if (suffix_variance == Variance.COVARIANT) {
@@ -524,26 +522,26 @@ namespace retypd.schema {
             } else {
                 this._str = this.@base.ToString() + variance;
             }
-            this._hash = hash(this.@base) ^ hash(summary);
+            this._hash = this.@base.GetHashCode() ^ summary.GetHashCode();
         }
         
-        public virtual object @__eq__(object other = Any) {
-            return other is Node && this.@base == other.@base && this.suffix_variance == other.suffix_variance && this._unforgettable == other._unforgettable;
+        public override bool Equals(object? that) {
+            return that is Node other && this.@base == other.@base && this.suffix_variance == other.suffix_variance && this._unforgettable == other._unforgettable;
         }
         
-        public virtual int @__hash__() {
+        public override int GetHashCode() {
             return this._hash;
         }
         
         // "Forget" the last element in the access path, creating a new Node. The new Node has
         //         variance that reflects this change.
         //         
-        public virtual object forget_once() {
-            if (this.@base.path) {
-                var prefix_path = this.@base.path.ToList();
-                var last = prefix_path.pop();
+        public virtual (AccessPathLabel?, Node?) forget_once() {
+            if (this.@base.path.Length > 0) {
+                var prefix_path = this.@base.path[0..^1];
+                var last = this.@base.path[^1];
                 var prefix = new DerivedTypeVariable(this.@base.@base, prefix_path);
-                return (last, new Node(prefix, Variance.combine(last.variance(), this.suffix_variance)));
+                return (last, new Node(prefix, VarianceExtensions.combine(last.variance(), this.suffix_variance)));
             }
             return (null, null);
         }
@@ -551,11 +549,11 @@ namespace retypd.schema {
         // "Recall" label, creating a new Node. The new Node has variance that reflects this
         //         change.
         //         
-        public virtual Node recall(AccessPathLabel label = AccessPathLabel) {
+        public virtual Node recall(AccessPathLabel label) {
             var path = this.@base.path.ToList();
-            path.append(label);
-            var variance = Variance.combine(this.suffix_variance, label.variance());
-            return new Node(new DerivedTypeVariable(this.@base.@base, path), variance);
+            path.Add(label);
+            var variance = VarianceExtensions.combine(this.suffix_variance, label.variance());
+            return new Node(new DerivedTypeVariable(this.@base.@base, path.ToArray()), variance);
         }
         
         public override string ToString() {
@@ -571,7 +569,7 @@ namespace retypd.schema {
         // Get a Node identical to this one but with inverted variance.
         //         
         public virtual Node inverse() {
-            return new Node(this.@base, Variance.invert(this.suffix_variance), this._unforgettable);
+            return new Node(this.@base, VarianceExtensions.invert(this.suffix_variance), this._unforgettable);
         }
     }
 }
