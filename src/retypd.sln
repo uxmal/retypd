@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.31424.327
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "retypd", "retypd.csproj", "{CBF4C452-85F6-40D3-837C-226BF9B7D913}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x86 = Debug|x86
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{CBF4C452-85F6-40D3-837C-226BF9B7D913}.Debug|x86.ActiveCfg = Debug|x86
+		{CBF4C452-85F6-40D3-837C-226BF9B7D913}.Debug|x86.Build.0 = Debug|x86
+		{CBF4C452-85F6-40D3-837C-226BF9B7D913}.Release|x86.ActiveCfg = Release|x86
+		{CBF4C452-85F6-40D3-837C-226BF9B7D913}.Release|x86.Build.0 = Release|x86
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {8DCE47B3-A194-4AD4-A1BC-6E44F4BB68D3}
+	EndGlobalSection
+EndGlobal
