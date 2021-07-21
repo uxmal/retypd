@@ -32,12 +32,13 @@ using System;
 using System.Linq;
 
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 
 public static class parser {
     
     static parser() {
-        @"Parsing helpers, mostly for unit testing.
-";
+        //"Parsing helpers, mostly for unit testing.
+
     }
     
     // Static helper functions for Schema tests. Since this parsing code is unlikely to be useful in
@@ -57,21 +58,20 @@ public static class parser {
         
         public object whitespace_pattern;
         
-        public object subtype_pattern = re.compile(@"(\S*) (?:⊑|<=) (\S*)");
+        public Regex subtype_pattern = new Regex(@"(\S*) (?:⊑|<=) (\S*)");
         
-        public object in_pattern = re.compile("in_([0-9]+)");
+        public Regex in_pattern = new Regex("in_([0-9]+)");
         
-        public object deref_pattern = re.compile("σ([0-9]+)@([0-9]+)");
+        public Regex deref_pattern = new Regex("σ([0-9]+)@([0-9]+)");
         
-        public object node_pattern = re.compile(@"(\S+)\.([⊕⊖])");
+        public Regex node_pattern = new Regex(@"(\S+)\.([⊕⊖])");
         
-        public object edge_pattern = re.compile(@"(\S+)\s+(?:→|->)\s+(\S+)(\s+\((forget|recall) (\S*)\))?");
+        public Regex edge_pattern = new Regex(@"(\S+)\s+(?:→|->)\s+(\S+)(\s+\((forget|recall) (\S*)\))?");
         
-        public object whitespace_pattern = re.compile(@"\s");
+        public Regex whitespace_pattern = new Regex(@"\s");
         
         // Parse an AccessPathLabel. Raises ValueError if it is improperly formatted.
         //         
-        [staticmethod]
         public static void parse_label(object label = str) {
             if (label == "load") {
                 return LoadLabel.instance();

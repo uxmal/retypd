@@ -1,23 +1,20 @@
 
-using ABC = abc.ABC;
-
-using Sequence = typing.Sequence;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 public static class c_types {
     
-    public class CType
-        : ABC {
+    public abstract class CType
+        /*: ABC*/ {
         
-        public object size {
-            get {
-            }
-        }
+        public abstract int size { get; }
     }
     
     public class VoidType
         : CType {
         
-        public object size {
+        public override int size {
             get {
                 return 0;
             }
@@ -29,14 +26,14 @@ public static class c_types {
         
         public object signed;
         
-        public object width;
+        public int width;
         
-        public IntType(Func<object> width = @int, Func<object> signed = @bool) {
+        public IntType(int width, bool signed) {
             this.width = width;
             this.signed = signed;
         }
         
-        public object size {
+        public override  int size {
             get {
                 return this.width;
             }
@@ -46,13 +43,13 @@ public static class c_types {
     public class FloatType
         : CType {
         
-        public object width;
+        public int width;
         
-        public FloatType(Func<object> width = @int) {
+        public FloatType(int width) {
             this.width = width;
         }
         
-        public object size {
+        public override int size {
             get {
                 return this.width;
             }
@@ -62,13 +59,13 @@ public static class c_types {
     public class CharType
         : CType {
         
-        public object width;
+        public int width;
         
-        public CharType(Func<object> width = @int) {
+        public CharType(int width) {
             this.width = width;
         }
         
-        public object size {
+        public override int size {
             get {
                 return this.width;
             }
@@ -78,16 +75,16 @@ public static class c_types {
     public class FieldType
         : CType {
         
-        public object ctype;
+        public CType ctype;
         
         public object offset;
         
-        public FieldType(CType ctype = CType, Func<object> offset = @int) {
+        public FieldType(CType ctype, int offset) {
             this.ctype = ctype;
             this.offset = offset;
         }
         
-        public object size {
+        public override int size {
             get {
                 return this.ctype.size;
             }
@@ -97,15 +94,15 @@ public static class c_types {
     public class StructType
         : CType {
         
-        public object fields;
+        public IEnumerable<FieldType> fields;
         
-        public StructType(object fields = Sequence[FieldType]) {
+        public StructType(IEnumerable<FieldType> fields ) {
             this.fields = fields;
         }
         
-        public object size {
+        public override int size {
             get {
-                throw new NotImplemented();
+                throw new NotImplementedException();
             }
         }
     }
@@ -113,16 +110,16 @@ public static class c_types {
     public class ArrayType
         : CType {
         
-        public object length;
+        public int length;
         
-        public object member_type;
+        public CType member_type;
         
-        public ArrayType(CType member_type = CType, Func<object> length = @int) {
+        public ArrayType(CType member_type , int length ) {
             this.member_type = member_type;
             this.length = length;
         }
         
-        public object size {
+        public override int size {
             get {
                 return this.member_type.size * this.length;
             }
@@ -132,15 +129,15 @@ public static class c_types {
     public class PointerType
         : CType {
         
-        public object target_type;
+        public CType target_type;
         
-        public PointerType(CType target_type = CType) {
+        public PointerType(CType target_type ) {
             this.target_type = target_type;
         }
         
-        public object size {
+        public override int size {
             get {
-                throw new NotImplemented();
+                throw new NotImplementedException();
             }
         }
     }
@@ -148,18 +145,18 @@ public static class c_types {
     public class FunctionType
         : CType {
         
-        public object params;
+        public List<CType> @params;
         
         public object return_type;
         
-        public FunctionType(CType return_type = CType, object params = Sequence[CType]) {
+        public FunctionType(CType return_type, List<CType> @params) {
             this.return_type = return_type;
-            this.params = params;
+            this.@params = @params;
         }
         
-        public object size {
+        public override int size {
             get {
-                throw new NotImplemented();
+                throw new NotImplementedException();
             }
         }
     }
@@ -185,12 +182,18 @@ public static class c_types {
     // N68335-17-C-0700.  The content of the information does not necessarily
     // reflect the position or policy of the Government and no official
     // endorsement should be inferred.
-    public static void UnionType(object CType) {
-        Func<object, object, object> @__init__ = (self,ctypes) => {
+    public class UnionType : CType {
+        public UnionType(ISet<CType> ctypes) {
             this.ctypes = ctypes;
-        };
-        Func<object, object> size = self => {
-            return max(map(t => t.size, this.ctypes));
-        };
+        }
+        public override int size
+        {
+            get
+            {
+                return this.ctypes.Select(t => t.size).Max();
+            }
+        }
+
+        public ISet<CType> ctypes;
     }
 }

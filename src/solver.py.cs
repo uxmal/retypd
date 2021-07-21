@@ -46,8 +46,7 @@ using System;
 public static class solver {
     
     static solver() {
-        @"The driver for the retypd analysis.
-";
+        // The driver for the retypd analysis.
     }
     
     // Represents the constraint graph in the slides. Essentially the same as the transducer from
@@ -55,10 +54,10 @@ public static class solver {
     //     
     public class ConstraintGraph {
         
-        public object graph;
+        public networkx.DiGraph graph;
         
-        public ConstraintGraph(object constraints = ConstraintSet) {
-            this.graph = networkx.DiGraph();
+        public ConstraintGraph(ConstraintSet constraints) {
+            this.graph = new networkx.DiGraph();
             foreach (var constraint in constraints.subtype) {
                 this.add_edges(constraint.left, constraint.right);
             }
@@ -67,7 +66,7 @@ public static class solver {
         // Add an edge to the graph. The optional atts dict should include, if anything, a mapping
         //         from the string 'label' to an EdgeLabel object.
         //         
-        public virtual bool add_edge(object head = Node, object tail = Node, Hashtable atts) {
+        public virtual bool add_edge(Node head, Node tail, Hashtable atts) {
             if (!this.graph.Contains(head) || !this.graph[head].Contains(tail)) {
                 this.graph.add_edge(head, tail, atts);
                 return true;
@@ -77,7 +76,7 @@ public static class solver {
         
         // Add an edge to the underlying graph. Also add its reverse with reversed variance.
         //         
-        public virtual bool add_edges(object sub = DerivedTypeVariable, object sup = DerivedTypeVariable, Hashtable atts) {
+        public virtual bool add_edges(DerivedTypeVariable sub , DerivedTypeVariable sup , Hashtable atts) {
             var changed = false;
             var forward_from = Node(sub, Variance.COVARIANT);
             var forward_to = Node(sup, Variance.COVARIANT);

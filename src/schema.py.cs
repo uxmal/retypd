@@ -27,37 +27,27 @@ using System.Linq;
 
 using System.Collections.Generic;
 
-public static class schema {
-    
-    static schema() {
-        @"Data types for an implementation of retypd analysis.
-";
-        logging.basicConfig();
-    }
-    
+namespace retypd.schema {
+
+        // Data types for an implementation of retypd analysis.
+
     // Represents a capability's variance (or that of some sequence of capabilities).
     //     
-    public class Variance
-        : Enum {
-        
-        public int CONTRAVARIANT;
-        
-        public int COVARIANT;
-        
-        public int CONTRAVARIANT = 0;
-        
-        public int COVARIANT = 1;
-        
-        [staticmethod]
-        public static int invert(object variance = "Variance") {
+    public enum Variance
+    {
+        CONTRAVARIANT = 0,
+        COVARIANT = 1
+    }   
+
+    public static class VarianceExtensions { 
+        public static Variance invert(this Variance variance) {
             if (variance == Variance.CONTRAVARIANT) {
                 return Variance.COVARIANT;
             }
             return Variance.CONTRAVARIANT;
         }
         
-        [staticmethod]
-        public static int combine(object lhs = "Variance", object rhs = "Variance") {
+        public static Variance combine(Variance lhs, Variance rhs) {
             if (lhs == rhs) {
                 return Variance.COVARIANT;
             }
@@ -73,17 +63,20 @@ public static class schema {
     //     and objects of class A are ordered with respect to each other by :py:method:`_less_than`.
     //     
     public class AccessPathLabel
-        : ABC {
+        {
         
-        public virtual bool @__lt__(string other = "AccessPathLabel") {
-            var s_type = type(this).ToString();
-            var o_type = type(other).ToString();
+        public static bool operator <( AccessPathLabel self, AccessPathLabel other) {
+            var s_type = self.GetType().Name;
+            var o_type = other.GetType().Name;
             if (s_type == o_type) {
-                return this._less_than(other);
+                return self._less_than(other);
             }
-            return s_type < o_type;
+            return s_type.CompareTo(o_type) < 0;
         }
-        
+
+        public static bool operator >(AccessPathLabel a, AccessPathLabel b) =>
+            b < a;
+
         // Compare two objects of the same exact type. Return True if self is less than other; true
         //         otherwise. Several of the subclasses are singletons, so we return False unless there is a
         //         need for an overriding implementation.
@@ -94,7 +87,7 @@ public static class schema {
         
         // Determines if the access path label is covariant or contravariant, per Table 1.
         //         
-        public virtual int variance() {
+        public virtual Variance variance() {
             return Variance.COVARIANT;
         }
     }
@@ -103,28 +96,17 @@ public static class schema {
     //     
     public class LoadLabel
         : AccessPathLabel {
+
+        public static LoadLabel instance = new LoadLabel();
         
-        public object _instance;
-        
-        public void _instance = null;
-        
-        public LoadLabel() {
-            throw new ValueError("Can't instantiate; call instance() instead");
+        private LoadLabel() {
         }
         
-        [classmethod]
-        public static void instance(object cls) {
-            if (cls._instance == null) {
-                cls._instance = cls.@__new__(cls);
-            }
-            return cls._instance;
-        }
-        
-        public virtual LoadLabel @__eq__(object other = Any) {
+        public override bool Equals(object other) {
             return object.ReferenceEquals(this, other);
         }
         
-        public virtual int @__hash__() {
+        public override int GetHashCode() {
             return 0;
         }
         
@@ -137,32 +119,21 @@ public static class schema {
     //     
     public class StoreLabel
         : AccessPathLabel {
+
+        public static StoreLabel instance = new StoreLabel();
         
-        public object _instance;
-        
-        public void _instance = null;
-        
-        public StoreLabel() {
-            throw new ValueError("Can't instantiate; call instance() instead");
+        private StoreLabel() {
         }
         
-        [classmethod]
-        public static void instance(object cls) {
-            if (cls._instance == null) {
-                cls._instance = cls.@__new__(cls);
-            }
-            return cls._instance;
-        }
-        
-        public virtual StoreLabel @__eq__(object other = Any) {
+        public override bool Equals(object other) {
             return object.ReferenceEquals(this, other);
         }
         
-        public virtual int @__hash__() {
+        public override int GetHashCode() {
             return 1;
         }
         
-        public virtual int variance() {
+        public override Variance variance() {
             return Variance.CONTRAVARIANT;
         }
         
@@ -178,30 +149,30 @@ public static class schema {
     public class InLabel
         : AccessPathLabel {
         
-        public object index;
+        public int index;
         
-        public InLabel(Func<object> index = @int) {
+        public InLabel(int index) {
             this.index = index;
         }
         
-        public virtual object @__eq__(object other = Any) {
-            return other is InLabel && this.index == other.index;
+        public override bool Equals(object other) {
+            return other is InLabel that && this.index == that.index;
         }
         
-        public virtual bool _less_than(string other = "InLabel") {
+        public override bool _less_than(InLabel other) {
             return this.index < other.index;
         }
         
-        public virtual int @__hash__() {
-            return hash(this.index);
+        public override int GetHashCode() {
+            return this.index.GetHashCode();
         }
         
-        public virtual int variance() {
+        public override Variance variance() {
             return Variance.CONTRAVARIANT;
         }
         
         public override string ToString() {
-            return "in_{self.index}";
+            return $"in_{this.index}";
         }
     }
     
