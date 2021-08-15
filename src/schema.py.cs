@@ -98,12 +98,12 @@ namespace schema {
     public class LoadLabel
         : AccessPathLabel {
 
-        public static LoadLabel instance = new LoadLabel();
+        public static readonly LoadLabel instance = new LoadLabel();
         
         private LoadLabel() {
         }
         
-        public override bool Equals(object other) {
+        public override bool Equals(object? other) {
             return object.ReferenceEquals(this, other);
         }
         
@@ -121,12 +121,12 @@ namespace schema {
     public class StoreLabel
         : AccessPathLabel {
 
-        public static StoreLabel instance = new StoreLabel();
+        public static readonly StoreLabel instance = new StoreLabel();
         
         private StoreLabel() {
         }
         
-        public override bool Equals(object other) {
+        public override bool Equals(object? other) {
             return object.ReferenceEquals(this, other);
         }
         
@@ -156,7 +156,7 @@ namespace schema {
             this.index = index;
         }
         
-        public override bool Equals(object other) {
+        public override bool Equals(object? other) {
             return other is InLabel that && this.index == that.index;
         }
         
@@ -183,12 +183,12 @@ namespace schema {
     public class OutLabel
         : AccessPathLabel {
         
-        public static OutLabel instance = new OutLabel();
+        public static readonly OutLabel instance = new OutLabel();
         
         private OutLabel() {
         }
         
-        public override bool Equals(object other) {
+        public override bool Equals(object? other) {
             return object.ReferenceEquals(this, other);
         }
         
@@ -374,7 +374,7 @@ namespace schema {
             this.right = right;
         }
         
-        public override bool Equals(object that) {
+        public override bool Equals(object? that) {
             return that is SubtypeConstraint other && this.left == other.left && this.right == other.right;
         }
         
@@ -448,14 +448,12 @@ namespace schema {
         public Kind kind;
         
         public enum Kind {
-            
             FORGET = 1,
-            
             RECALL = 2,
         }
         
         public EdgeLabel(AccessPathLabel capability, Kind kind) {
-            object type_str;
+            string type_str;
             this.capability = capability;
             this.kind = kind;
             if (this.kind == EdgeLabel.Kind.FORGET) {

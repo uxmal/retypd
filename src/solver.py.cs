@@ -31,12 +31,13 @@ using Variance = schema.Variance;
 */
 using SchemaParser = parser.SchemaParser;
 using schema;
+using retypd;
 
 /*
 using os;
 */
 
-using networkx;
+using static networkx;
 
 using System.Collections;
 
@@ -45,7 +46,6 @@ using System.Collections.Generic;
 using System.Linq;
 
 using System;
-using retypd.schema;
 using System.IO;
 
 public static class solver {
@@ -71,9 +71,10 @@ public static class solver {
         // Add an edge to the graph. The optional atts dict should include, if anything, a mapping
         //         from the string 'label' to an EdgeLabel object.
         //         
-        public virtual bool add_edge(Node head, Node tail, Hashtable? atts = null) {
-            if (!this.graph.Contains(head) || !this.graph[head].Contains(tail)) {
-                this.graph.add_edge(head, tail, atts ?? new Hashtable());
+        public virtual bool add_edge(Node head, Node tail, Dictionary<string,object>? atts = null) {
+            if (!this.graph.Contains(head) || !this.graph[head].Contains(tail))
+            {
+                this.graph.add_edge(head, tail, atts ?? new Dictionary<string, object>());
                 return true;
             }
             return false;
@@ -81,7 +82,7 @@ public static class solver {
         
         // Add an edge to the underlying graph. Also add its reverse with reversed variance.
         //         
-        public virtual bool add_edges(DerivedTypeVariable sub , DerivedTypeVariable sup , Hashtable atts) {
+        public virtual bool add_edges(DerivedTypeVariable sub , DerivedTypeVariable sup , Dictionary<string, object>? atts = null) {
             var changed = false;
             var forward_from = new Node(sub, Variance.COVARIANT);
             var forward_to = new Node(sup, Variance.COVARIANT);
@@ -100,8 +101,10 @@ public static class solver {
                 var node = n;
                 var (capability, prefix) = node.forget_once();
                 while (prefix is not null) {
-                    this.graph.add_edge(node, prefix, label: new EdgeLabel(capability!, EdgeLabel.Kind.FORGET));
-                    this.graph.add_edge(prefix, node, label: new EdgeLabel(capability!, EdgeLabel.Kind.RECALL));
+                    var forLabel = new Dictionary<string, object> { { "label", new EdgeLabel(capability!, EdgeLabel.Kind.FORGET) } };
+                    var recLabel = new Dictionary<string, object> { { "label", new EdgeLabel(capability!, EdgeLabel.Kind.RECALL) } };
+                    this.graph.add_edge(node, prefix, forLabel);
+                    this.graph.add_edge(prefix, node, recLabel);
                     node = prefix;
                     (capability, prefix) = node.forget_once();
                 }
@@ -114,7 +117,8 @@ public static class solver {
             var changed = false;
             var reaching_R = new Dictionary<Node, HashSet<(AccessPathLabel, Node)>> { };
             void add_forgets(Node dest, HashSet<(AccessPathLabel, Node)> forgets) {
-                if (!reaching_R.ContainsKey(dest) || !(forgets <= reaching_R[dest])) {
+                //if (!reaching_R.ContainsKey(dest) || !(forgets <= reaching_R[dest])) {
+                if (!reaching_R.ContainsKey(dest) || !(forgets.IsSubsetOf(reaching_R[dest]))) {
                     changed = true;
                     if (!reaching_R.TryGetValue(dest, out var fs)) {
                         fs = new HashSet<(AccessPathLabel, Node)>();
@@ -130,28 +134,28 @@ public static class solver {
                 return node.suffix_variance == Variance.CONTRAVARIANT;
             };
             foreach (var (head_x, tail_y) in this.graph.edges) {
-                var label = this.graph[head_x][tail_y].get("label");
-                if (label && label.kind == EdgeLabel.Kind.FORGET) {
-                    add_forgets(tail_y, new HashSet{
+                var label = (EdgeLabel)this.graph[head_x][tail_y].get("label");
+                if (label is not null && label.kind == EdgeLabel.Kind.FORGET) {
+                    add_forgets(tail_y, new HashSet<(AccessPathLabel, Node)> { 
                         (label.capability, head_x)});
                 }
             }
             while (changed) {
                 changed = false;
                 foreach (var (head_x, tail_y) in this.graph.edges) {
-                    if (!this.graph[head_x][tail_y].get("label")) {
-                        add_forgets(tail_y, reaching_R.get(head_x, new HashSet<object>()));
+                    if (this.graph[head_x][tail_y].get("label") is null) {
+                        add_forgets(tail_y, reaching_R.get(head_x, new HashSet<(AccessPathLabel, Node)>()));
                     }
                 }
                 var existing_edges = this.graph.edges.ToList();
                 foreach (var (head_x, tail_y) in existing_edges) {
-                    var label = this.graph[head_x][tail_y].get("label");
-                    if (label && label.kind == EdgeLabel.Kind.RECALL) {
+                    var label = (EdgeLabel) this.graph[head_x][tail_y].get("label");
+                    if (label is not null && label.kind == EdgeLabel.Kind.RECALL) {
                         var capability_l = label.capability;
-                        foreach (var _tup_4 in reaching_R.get(head_x, new HashSet<object>())) {
-                            label = _tup_4.Item1;
+                        foreach (var _tup_4 in reaching_R.get(head_x, new HashSet<(AccessPathLabel, Node)>())) {
+                            var aplabel = _tup_4.Item1;
                             var origin_z = _tup_4.Item2;
-                            if (label == capability_l) {
+                            if (aplabel == capability_l) {
                                 add_edge(origin_z, tail_y);
                             }
                         }
@@ -170,7 +174,7 @@ public static class solver {
                             label = StoreLabel.instance;
                         }
                         if (label is not null) {
-                            add_forgets(x.inverse(), new HashSet {
+                            add_forgets(x.inverse(), new HashSet<(AccessPathLabel, Node)>{
                                 (label, origin_z)});
                         }
                     }
@@ -184,9 +188,9 @@ public static class solver {
             var width = 2 + graph.nodes.Select(v => v.ToString().Length).Max();
             var (sub, sup) = edge;
             var label = graph[sub][sup].get("label");
-            var edge_str = $"{sub:width}→  {sup:{width}}";
-            if (label) {
-                return edge_str + " ({label})";
+            var edge_str = $"{sub.ToString().PadRight(width)}→  {sup.ToString().PadRight(width)}";
+            if (label is not null) {
+                return edge_str + $" ({label})";
             } else {
                 return edge_str;
             }
@@ -194,11 +198,11 @@ public static class solver {
         
         public static string graph_to_dot(string name, networkx.DiGraph<Node> graph) {
             var nt = Environment.NewLine + "\t";
-            static string edge_to_str((Node,Node) edge) {
+            string edge_to_str((Node,Node) edge) {
                 var (sub, sup) = edge;
                 var label = graph[sub][sup].get("label");
                 var label_str = "";
-                if (label) {
+                if (label is not null) {
                     label_str = $" [label=\"{label}\"]";
                 }
                 return $"\"{sub}\" -> \"{sup}\"{label_str};";
@@ -285,14 +289,14 @@ public static class solver {
         public virtual void _unforgettable_subgraph_split() {
             var edges = new HashSet<(Node,Node)>(this.graph.edges);
             foreach (var (head,tail) in edges) {
-                var label = this.graph[head][tail].get("label");
-                if (label && label.kind == EdgeLabel.Kind.FORGET) {
+                var label = (EdgeLabel)this.graph[head][tail].get("label");
+                if (label is not null && label.kind == EdgeLabel.Kind.FORGET) {
                     continue;
                 }
                 var recall_head = head.split_unforgettable();
                 var recall_tail = tail.split_unforgettable();
                 var atts = this.graph[head][tail];
-                if (label && label.kind == EdgeLabel.Kind.RECALL) {
+                if (label is not null && label.kind == EdgeLabel.Kind.RECALL) {
                     this.graph.remove_edge(head, tail);
                     this.graph.add_edge(head, recall_tail, atts);
                 }
@@ -376,8 +380,8 @@ public static class solver {
             var forget_graph = new networkx.DiGraph<Node>(this.graph);
             var recall_graph = new networkx.DiGraph<Node>(this.graph);
             foreach (var (head, tail) in this.graph.edges) {
-                var label = this.graph[head][tail].get("label");
-                if (label) {
+                var label = (EdgeLabel)this.graph[head][tail].get("label");
+                if (label is not null) {
                     if (label.kind == EdgeLabel.Kind.FORGET) {
                         recall_graph.remove_edge(head, tail);
                     } else {
@@ -386,22 +390,23 @@ public static class solver {
                 }
             }
             var loop_breakers = new HashSet<DerivedTypeVariable>();
-            foreach (var graph in new List<object> {
+            foreach (var graph in new List<DiGraph<Node>> {
                 forget_graph,
                 recall_graph
             }) {
                 var condensation = networkx.condensation(graph);
-                var visited = new HashSet<object>();
-                foreach (var scc_node in reversed(networkx.topological_sort(condensation).ToList())) {
+                var visited = new HashSet<int>();
+                foreach (var scc_node in networkx.topological_sort(condensation).AsEnumerable().Reverse()) {
                     var candidates = new HashSet<DerivedTypeVariable>();
-                    var scc = (List<Node>) condensation.nodes[scc_node]["members"];
+                    var scc = (List<Node>)condensation.nodes[scc_node]["members"];
                     visited.Add(scc_node);
                     if (scc.Count == 1) {
                         continue;
                     }
                     foreach (var node in scc) {
                         foreach (var predecessor in this.graph.predecessors(node)) {
-                            var scc_index = condensation.graph["mapping"][predecessor];
+                            var mapping = (Dictionary<Node, int>)condensation.graph["mapping"];
+                            var scc_index = mapping[predecessor];
                             if (!visited.Contains(scc_index)) {
                                 candidates.Add(node.@base);
                             }
@@ -440,9 +445,9 @@ public static class solver {
             var all_paths = new List<(List<EdgeLabel>, Node)>();
             if (this.graph.Contains(origin)) {
                 foreach (var succ in this.graph.successors(origin)) {
-                    var label = this.graph[origin][succ].get("label");
+                    var label = (EdgeLabel) this.graph[origin][succ].get("label");
                     var new_string = @string.ToList();
-                    if (label) {
+                    if (label is not null) {
                         new_string.Add(label);
                     }
                     all_paths.AddRange(this._find_paths(succ, path, new_string));

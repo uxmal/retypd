@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <ProjectGuid>{CBF4C452-85F6-40D3-837C-226BF9B7D913}</ProjectGuid>
-    <OutputType>Exe</OutputType>
+    <OutputType>library</OutputType>
     <AssemblyName>retypd</AssemblyName>
     <TargetFramework>net5.0</TargetFramework>
     <LangVersion>9.0</LangVersion>

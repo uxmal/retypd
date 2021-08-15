@@ -27,24 +27,24 @@ public static class test_schema {
     public class SchemaTest
         {
         
-        public virtual void graphs_are_equal(networkx.DiGraph<Node> graph, Dictionary<(Node,Node), Hashtable> edge_set) {
-            var edges = graph.edges().ToArray();
+        public virtual void graphs_are_equal(networkx.DiGraph<Node> graph, Dictionary<(Node,Node), Dictionary<string,object>> edge_set) {
+            var edges = graph.edges.ToArray();
             Assert.Equals(edges.Length, edge_set.Count);
-            foreach (var (head,tail) in edges) {
+            foreach (var edge in edges) {
                 Assert.IsTrue(edge_set.ContainsKey(edge));
-                Assert.Equals(graph[head][tail], edge_set[edge]);
+                Assert.Equals(graph[edge.Item1][edge.Item2], edge_set[edge]);
             }
         }
         
         // Convert a collection of edge strings into a dict. Used for comparing a graph against an
         //         expected value.
         //         
-        public static Dictionary<(Node, Node), Hashtable> edges_to_dict(IEnumerable<string> edges) {
-            var graph = new Dictionary<(Node, Node), Hashtable> {
+        public static Dictionary<(Node, Node), Dictionary<string, object>> edges_to_dict(IEnumerable<string> edges) {
+            var graph = new Dictionary<(Node, Node), Dictionary<string,object>> {
             };
             foreach (var edge in edges) {
                 var (head, tail, atts) = SchemaParser.parse_edge(edge);
-                graph[(head, tail)] = atts;
+                graph[(head,tail)] = atts;
             }
             return graph;
         }

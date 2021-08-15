@@ -131,7 +131,7 @@ public static class parser {
         // Parse an edge in the graph, which consists of two nodes and an arrow, with an optional
         //         edge label.
         //         
-        public static (object, object, Dictionary<string, object>) parse_edge(string edge) {
+        public static (Node, Node, Dictionary<string, object>) parse_edge(string edge) {
             EdgeLabel.Kind kind;
             var edge_match = SchemaParser.edge_pattern.Match(edge);
             if (edge_match.Success) {
