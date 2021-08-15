@@ -485,9 +485,9 @@ namespace schema {
     //     
     public class Node {
         
-        public int _hash;
+        private int _hash;
         
-        public string _str;
+        private string _str;
         
         public Unforgettable _unforgettable;
         

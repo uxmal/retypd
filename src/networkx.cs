@@ -8,10 +8,26 @@ public static class networkx
 {
     public class DiGraph<TItem> where TItem : notnull
     {
+        internal Dictionary<TItem, NodeInfo> _nodes;
+        internal Dictionary<(TItem, TItem), Dictionary<string, object>> _edges;
+
+        internal record NodeInfo(
+            TItem Item, 
+            List<TItem> Pred, 
+            List<TItem> Succ,
+            Dictionary<string, object> Data)
+        {
+
+        }
 
         //Adding and removing nodes and edges
         //Initialize a graph with edges, name, or graph attributes.
-        public DiGraph() => throw new NotImplementedException();
+        public DiGraph()
+        {
+            this._nodes = new Dictionary<TItem, NodeInfo>();
+            this._edges = new();
+            this.graph = new Dictionary<string, object>();
+        }
         
         public DiGraph(IEnumerable<(TItem, TItem)> edges) => throw new NotImplementedException();
 
@@ -38,7 +54,15 @@ public static class networkx
 
         //Add an edge between u and v.
 
-        public void add_edge(TItem u_of_edge, TItem v_of_edge, Dictionary<string, object>? attr = null) => throw new NotImplementedException();
+        public void add_edge(TItem u_of_edge, TItem v_of_edge, Dictionary<string, object>? attr = null)
+        {
+            if (!_nodes.ContainsKey(u_of_edge))
+                _nodes.Add(u_of_edge, new Dictionary<string, object>());
+            if (!_nodes.ContainsKey(v_of_edge))
+                _nodes.Add(v_of_edge, new Dictionary<string, object>());
+            var e = (u_of_edge, v_of_edge);
+            this._edges.Add(e, attr!);
+        }
 
 
         //Add all the edges in ebunch_to_add.
@@ -78,7 +102,7 @@ public static class networkx
         //Reporting nodes edges and neighbors
 
         // A NodeView of the Graph as G.nodes or G.nodes().
-        public NodeView<TItem> nodes => throw new NotImplementedException();
+        public NodeView<TItem> nodes => new NodeView<TItem>(this._nodes);
 
         //Iterate over the nodes.
         public IEnumerator<TItem> GetEnumerator() => throw new NotImplementedException();
@@ -88,11 +112,14 @@ public static class networkx
 
 
         //Returns True if n is a node, False otherwise.
-        public bool Contains(TItem n) => throw new NotImplementedException();
+        public bool Contains(TItem n)
+        {
+            return this._nodes.ContainsKey(n);
+        }
 
 
         //An OutEdgeView of the DiGraph as G.edges or G.edges().
-        public OutEdgeView<TItem> edges => throw new NotImplementedException();
+        public OutEdgeView<TItem> edges => new OutEdgeView<TItem>(this._edges);
 
 
         //An OutEdgeView of the DiGraph as G.edges or G.edges().
@@ -121,7 +148,7 @@ public static class networkx
 
 
         //Returns a dict of neighbors of node n.
-        public AdjacencyView<TItem> this[TItem node] => throw new NotImplementedException();
+        public AdjacencyView<TItem> this[TItem node] => new AdjacencyView<TItem>(this, node);
 
 
         //Returns an iterator over successor nodes of n.
@@ -210,24 +237,36 @@ public static class networkx
         public DiGraph<TItem> reverse() => throw new NotImplementedException();
     }
 
-    public class AdjacencyView<TItem> : IEnumerable<TItem>
+    public class AdjacencyView<TItem> : IEnumerable<TItem> where TItem : notnull
     {
+        private readonly DiGraph<TItem> graph;
+        private readonly TItem item;
+
+        public AdjacencyView(DiGraph<TItem> g, TItem item)
+        {
+            this.graph = g;
+            this.item = item;
+        }
+
         public IEnumerator<TItem> GetEnumerator() => throw new NotImplementedException();
 
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
         public AdjacencyView<TItem> copy() => throw new NotImplementedException();
 
-        public Dictionary<string, object> this[TItem node] => throw new NotImplementedException();
+        public Dictionary<string, object> this[TItem node] => this.graph._edges[(item, node)];
 
         public TItem get(TItem key) => throw new NotImplementedException();
 
-        public IEnumerable<KeyValuePair<TItem, Dictionary<string,object>>> items() => throw new NotImplementedException();
+        public IEnumerable<KeyValuePair<TItem, Dictionary<string, object>>> items() => throw new NotImplementedException();
 
         public IEnumerable<TItem> keys() => throw new NotImplementedException();
+
         public IEnumerable<Dictionary<string, object>> values() => throw new NotImplementedException();
 
-        public bool Contains(TItem n) => throw new NotImplementedException();
+        public bool Contains(TItem n) {
+            graph._nodes
+        }throw new NotImplementedException();
     }
 
     public class DegreeView<TItem>
@@ -242,26 +281,46 @@ public static class networkx
     {
     }
 
-    public class NodeView<TItem> : IEnumerable<TItem>
+    public class NodeView<TItem> : IEnumerable<TItem> 
+        where TItem : notnull
     {
-        public IEnumerator<TItem> GetEnumerator()
+        Dictionary<TItem, Dictionary<string, object>> data;
+        private Dictionary<TItem, object> nodes;
+
+        public NodeView(Dictionary<TItem, object> nodes)
         {
-            throw new NotImplementedException();
+            this.nodes = nodes;
         }
+
+        public IEnumerator<TItem> GetEnumerator() => nodes.Keys.GetEnumerator();
 
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
+        public Dictionary<string, object> this[TItem item]
+        {
+            get
+            {
+                return data[item];
+            }
+        }
     }
 
     public class OutDegreeView<TItem>
     {
     }
 
-    public class OutEdgeView<TItem> : IEnumerable<(TItem, TItem)>
+    public class OutEdgeView<TItem> : IEnumerable<(TItem From, TItem To)>
     {
-        public IEnumerator<(TItem, TItem)> GetEnumerator()
+        private Dictionary<(TItem, TItem), Dictionary<string, object>> edges;
+
+        public OutEdgeView(Dictionary<(TItem, TItem), Dictionary<string, object>> edges)
         {
-            throw new NotImplementedException();
+            this.edges = edges;
+        }
+
+        public IEnumerator<(TItem From, TItem To)> GetEnumerator()
+        {
+            return edges.Keys.Select(e => (e.Item1, e.Item2)).GetEnumerator();
         }
 
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
@@ -374,16 +433,24 @@ The condensation graph C of G. The node labels are integers corresponding to
             select (u, v));
      
         // Add a list of members (ie original nodes) to each node (ie scc) in C.
-        nx.set_node_attributes(C, members, "members");
-    return C;
+        networkx.set_node_attributes(C, members, "members");
+        return C;
     }
 
-    public static DiGraph<TItem> reversed<TItem>(DiGraph<TItem> graph)
+    private static void set_node_attributes<T, V>(DiGraph<T> c, Dictionary<T, V> members, string attrName) where T : notnull
+    {
+        foreach (var n in members)
+        {
+            c.nodes[n.Key][attrName] = n.Value!;
+        }
+    }
+
+    public static DiGraph<TItem> reversed<TItem>(DiGraph<TItem> graph) where TItem : notnull
     {
         throw new NotImplementedException();
     }
 
-    internal static List<TItem> topological_sort<TItem>(DiGraph<TItem> g)
+    internal static List<TItem> topological_sort<TItem>(DiGraph<TItem> g) where TItem : notnull
     {
         throw new NotImplementedException();
     }

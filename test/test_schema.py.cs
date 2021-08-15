@@ -139,7 +139,8 @@ public static class test_schema {
         }
         
         // Another simple test from the paper (the program modeled in Figure 14 on p. 26).
-        //         
+        //
+        [Test]
         public virtual void test_other_simple_constraints() {
             var constraints = new ConstraintSet();
             constraints.add(SchemaParser.parse_constraint("y <= p"));
@@ -210,6 +211,7 @@ public static class test_schema {
         // A test based on the running example from the paper (Figure 2 on p. 3) and the slides
         //         (slides 67-83, labeled as slides 13-15).
         //         
+        [Test]
         public virtual void test_recursive() {
             var constraints = new ConstraintSet();
             constraints.add(SchemaParser.parse_constraint("F.in_0 ⊑ δ"));
@@ -353,6 +355,7 @@ public static class test_schema {
         
         // Same as the preceding test, but end-to-end.
         //         
+        [Test]
         public virtual void test_end_to_end() {
             var constraints = new ConstraintSet ();
             constraints.add(SchemaParser.parse_constraint("F.in_0 ⊑ δ"));
