@@ -29,7 +29,7 @@ public static class test_schema {
         
         public virtual void graphs_are_equal(networkx.DiGraph<Node> graph, Dictionary<(Node,Node), Dictionary<string,object>> edge_set) {
             var edges = graph.edges.ToArray();
-            Assert.Equals(edges.Length, edge_set.Count);
+            Assert.AreEqual(edges.Length, edge_set.Count);
             foreach (var edge in edges) {
                 Assert.IsTrue(edge_set.ContainsKey(edge));
                 Assert.Equals(graph[edge.Item1][edge.Item2], edge_set[edge]);

@@ -477,22 +477,20 @@ namespace schema {
             return this._str;
         }
     }
-    
-    // A node in the graph of constraints. Node objects are immutable.
-    // 
-    //     Unforgettable is a flag used to differentiate between two subgraphs later in the algorithm. See
-    //     :py:method:`Solver._unforgettable_subgraph_split` for details.
-    //     
+
+    /// <summary>
+    /// A node in the graph of constraints. Node objects are immutable.
+    /// 
+    /// Unforgettable is a flag used to differentiate between two subgraphs later in the algorithm. See
+    /// <see cref="Solver._unforgettable_subgraph_split" /> for details.
+    /// </summary>
     public class Node {
         
         private int _hash;
-        
         private string _str;
         
         public Unforgettable _unforgettable;
-        
         public DerivedTypeVariable @base;
-        
         public Variance suffix_variance;
         
         public enum Unforgettable {

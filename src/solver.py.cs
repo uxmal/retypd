@@ -50,9 +50,7 @@ using System.IO;
 
 public static class solver {
     
-    static solver() {
-        // The driver for the retypd analysis.
-    }
+    // The driver for the retypd analysis.
     
     // Represents the constraint graph in the slides. Essentially the same as the transducer from
     //     Appendix D. Edge weights use the formulation from the paper.
@@ -238,11 +236,8 @@ public static class solver {
     public class Solver {
         
         public Dictionary<DerivedTypeVariable, DerivedTypeVariable> _type_vars;
-        
         public ConstraintGraph constraint_graph;
-        
         public HashSet<SubtypeConstraint> constraints;
-        
         public DiGraph<Node> graph;
         
         // C# doesn't have union types or this would be:
@@ -429,7 +424,8 @@ public static class solver {
         public virtual List<(List<EdgeLabel>,Node)> _find_paths(
             Node origin,
             List<Node>? path = null,
-            List<EdgeLabel>? @string = null) {
+            List<EdgeLabel>? @string = null)
+        {
             path ??= new List<Node>();
             @string ??= new List<EdgeLabel>();
             if (path.Count > 0 && this.interesting.Contains(origin.@base)) {
@@ -461,7 +457,8 @@ public static class solver {
         //         covariant, so only covariant vertices can represent a derived type variable without an
         //         elided portion of its path) and if the two variables are not equal, emit a constraint.
         //         
-        public virtual void _maybe_add_constraint(Node origin, Node dest, List<EdgeLabel> @string) {
+        public virtual void _maybe_add_constraint(Node origin, Node dest, List<EdgeLabel> @string)
+        {
             var lhs = origin;
             var rhs = dest;
             foreach (var label in @string) {

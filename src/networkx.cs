@@ -17,8 +17,9 @@ public static class networkx
             List<TItem> Succ,
             Dictionary<string, object> Data)
         {
-
+            public NodeInfo(TItem Item) : this(Item, new List<TItem>(), new List<TItem>(), new()) { }
         }
+
 
         //Adding and removing nodes and edges
         //Initialize a graph with edges, name, or graph attributes.
@@ -57,9 +58,9 @@ public static class networkx
         public void add_edge(TItem u_of_edge, TItem v_of_edge, Dictionary<string, object>? attr = null)
         {
             if (!_nodes.ContainsKey(u_of_edge))
-                _nodes.Add(u_of_edge, new Dictionary<string, object>());
+                _nodes.Add(u_of_edge, new NodeInfo(u_of_edge));
             if (!_nodes.ContainsKey(v_of_edge))
-                _nodes.Add(v_of_edge, new Dictionary<string, object>());
+                _nodes.Add(v_of_edge, new NodeInfo(v_of_edge));
             var e = (u_of_edge, v_of_edge);
             this._edges.Add(e, attr!);
         }
@@ -237,15 +238,18 @@ public static class networkx
         public DiGraph<TItem> reverse() => throw new NotImplementedException();
     }
 
-    public class AdjacencyView<TItem> : IEnumerable<TItem> where TItem : notnull
+    public class AdjacencyView<TItem> : IEnumerable<TItem>
+        where TItem : notnull
     {
         private readonly DiGraph<TItem> graph;
         private readonly TItem item;
+        private readonly List<(TItem from, TItem to)> edges;
 
         public AdjacencyView(DiGraph<TItem> g, TItem item)
         {
             this.graph = g;
             this.item = item;
+            this.edges = g.edges.Where(e => e.From.Equals(item)).ToList();
         }
 
         public IEnumerator<TItem> GetEnumerator() => throw new NotImplementedException();
@@ -264,9 +268,10 @@ public static class networkx
 
         public IEnumerable<Dictionary<string, object>> values() => throw new NotImplementedException();
 
-        public bool Contains(TItem n) {
-            graph._nodes
-        }throw new NotImplementedException();
+        public bool Contains(TItem n)
+        {
+            return edges.Any(e => e.to.Equals(n));
+        }
     }
 
     public class DegreeView<TItem>
@@ -284,10 +289,9 @@ public static class networkx
     public class NodeView<TItem> : IEnumerable<TItem> 
         where TItem : notnull
     {
-        Dictionary<TItem, Dictionary<string, object>> data;
-        private Dictionary<TItem, object> nodes;
+        private Dictionary<TItem, DiGraph<TItem>.NodeInfo> nodes;
 
-        public NodeView(Dictionary<TItem, object> nodes)
+        internal NodeView(Dictionary<TItem, DiGraph<TItem>.NodeInfo> nodes)
         {
             this.nodes = nodes;
         }
@@ -300,7 +304,7 @@ public static class networkx
         {
             get
             {
-                return data[item];
+                return nodes[item].Data;
             }
         }
     }
