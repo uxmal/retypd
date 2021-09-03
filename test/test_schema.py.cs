@@ -30,10 +30,24 @@ public static class test_schema {
         public virtual void graphs_are_equal(networkx.DiGraph<Node> graph, Dictionary<(Node,Node), Dictionary<string,object>> edge_set) {
             var edges = graph.edges.ToArray();
             Assert.AreEqual(edges.Length, edge_set.Count);
+            int n = 0;
             foreach (var edge in edges) {
                 Assert.IsTrue(edge_set.ContainsKey(edge));
-                Assert.Equals(graph[edge.Item1][edge.Item2], edge_set[edge]);
+                ++n;
+                Assert.IsTrue(CompareBags(graph[edge.Item1][edge.Item2], edge_set[edge]));
             }
+        }
+
+        private bool CompareBags(Dictionary<string, object> a, Dictionary<string, object> b)
+        {
+            Assert.AreEqual(a.Count, b.Count);
+            foreach (var de in a)
+            {
+                Assert.IsTrue(b.ContainsKey(de.Key));
+                if (!de.Value.Equals(b[de.Key]))
+                    return false;
+            }
+            return true;
         }
         
         // Convert a collection of edge strings into a dict. Used for comparing a graph against an

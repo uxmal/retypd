@@ -32,7 +32,12 @@ public static class networkx
         
         public DiGraph(IEnumerable<(TItem, TItem)> edges) => throw new NotImplementedException();
 
-        public DiGraph(DiGraph<TItem> graph) => throw new NotImplementedException();
+        public DiGraph(DiGraph<TItem> graph) 
+        {
+            this._nodes = new Dictionary<TItem, NodeInfo>(graph._nodes);
+            this._edges = new Dictionary<(TItem, TItem), Dictionary<string, object>>(graph._edges);
+            this.graph = new Dictionary<string, object>(graph.graph);
+        }
 
         public Dictionary<string, object> graph { get; set; }
 
@@ -78,11 +83,20 @@ public static class networkx
 
 
         // Remove the edge between u and v.
-        public void remove_edge(TItem u, TItem v) => throw new NotImplementedException();
+        public void remove_edge(TItem u, TItem v)
+        {
+            _edges.Remove((u,v));
+        }
 
 
         //Remove all edges specified in ebunch.
-        public void remove_edges_from(IEnumerable<(TItem, TItem)> ebunch) => throw new NotImplementedException();
+        public void remove_edges_from(IEnumerable<(TItem, TItem)> ebunch)
+        {
+            foreach (var edge in ebunch)
+            {
+                _edges.Remove(edge);
+            }
+        }
 
 
 
@@ -106,7 +120,7 @@ public static class networkx
         public NodeView<TItem> nodes => new NodeView<TItem>(this._nodes);
 
         //Iterate over the nodes.
-        public IEnumerator<TItem> GetEnumerator() => throw new NotImplementedException();
+        public IEnumerator<TItem> GetEnumerator() => this._nodes.Keys.GetEnumerator();
 
         //Returns True if the graph contains the node n.
         public bool has_node(TItem n) => throw new NotImplementedException();
@@ -184,7 +198,7 @@ public static class networkx
         public int number_of_nodes() => throw new NotImplementedException();
 
         //Returns the number of nodes in the graph.
-        public int Count => throw new NotImplementedException();
+        public int Count => _nodes.Count;
 
 
         // A DegreeView for the Graph as G.degree or G.degree().
@@ -252,7 +266,8 @@ public static class networkx
             this.edges = g.edges.Where(e => e.From.Equals(item)).ToList();
         }
 
-        public IEnumerator<TItem> GetEnumerator() => throw new NotImplementedException();
+        public IEnumerator<TItem> GetEnumerator() =>
+            edges.Select(e => e.to).GetEnumerator();
 
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 

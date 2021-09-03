@@ -29,6 +29,8 @@ using SubtypeConstraint = schema.SubtypeConstraint;
 
 using Variance = schema.Variance;
 */
+#pragma warning disable IDE1006
+
 using SchemaParser = parser.SchemaParser;
 using schema;
 using retypd;
@@ -243,7 +245,6 @@ public static class solver {
         // C# doesn't have union types or this would be:
         // IEnumerable<Union(DerivedTypeVariable, string)>
         public HashSet<DerivedTypeVariable> interesting;
-        
         public int next;
         
         public Solver(ConstraintSet constraints, IEnumerable<object> interesting) {

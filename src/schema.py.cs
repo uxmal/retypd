@@ -27,6 +27,7 @@ using System.Linq;
 
 using System.Collections.Generic;
 using System;
+using System.Collections;
 
 namespace schema {
 
@@ -64,8 +65,23 @@ namespace schema {
     //     and objects of class A are ordered with respect to each other by :py:method:`_less_than`.
     //     
     public class AccessPathLabel
+    {
+        public static bool operator ==(AccessPathLabel self, AccessPathLabel other)
         {
-        
+            var s_type = self.GetType().Name;
+            var o_type = other.GetType().Name;
+            if (s_type == o_type)
+            {
+                return
+                    !self._less_than(other) &&
+                    !other._less_than(self);
+            }
+            return false;
+        }
+
+        public static bool operator !=(AccessPathLabel self, AccessPathLabel other) =>
+            !(self == other);
+
         public static bool operator <( AccessPathLabel self, AccessPathLabel other) {
             var s_type = self.GetType().Name;
             var o_type = other.GetType().Name;
@@ -262,32 +278,47 @@ namespace schema {
         }
         
         public override bool Equals(object? that) {
-            return that is DerivedTypeVariable other && this.@base == other.@base && this.path == other.path;
+            return that is DerivedTypeVariable other &&
+                this.@base == other.@base &&
+                ComparePaths(this.path ,other.path) == 0;
         }
-        
-        public static bool operator < (DerivedTypeVariable self, DerivedTypeVariable other) {
-            int d = self.@base.CompareTo(other.@base);
-            if (d == 0) {
-                d = self.path.Length.CompareTo(other.path.Length);
-                if (d == 0)
+
+        public static bool operator == (DerivedTypeVariable self, DerivedTypeVariable other) {
+            return (self.@base == other.@base &&
+                    ComparePaths(self.path, other.path) == 0);
+        }
+
+        public static bool operator !=(DerivedTypeVariable self, DerivedTypeVariable other) =>
+            !(self == other);
+
+        private static int ComparePaths(AccessPathLabel[] a, AccessPathLabel[] b)
+        {
+            int d = a.Length.CompareTo(b.Length);
+            if (d == 0)
+            {
+                for (int i = 0; i < a.Length; ++i)
                 {
-                    for (int i = 0; i < self.path.Length; ++i)
-                    {
-                        if (self.path[i] < other.path[i])
-                            return true;
-                        else if (self.path[i] > other.path[i])
-                            return false;
-                    }
-                    return false;
+                    if (a[i] < b[i])
+                        return -1;
+                    else if (a[i] > b[i])
+                        return 1;
                 }
             }
+            return d;
+        }
+
+        public static bool operator < (DerivedTypeVariable self, DerivedTypeVariable other) {
+            int d = self.@base.CompareTo(other.@base);
+            if (d == 0)
+                d = ComparePaths(self.path, other.path);
             return d < 0;
         }
 
         public static bool operator >(DerivedTypeVariable a, DerivedTypeVariable b) =>
             b < a;
+        
         public override int GetHashCode() {
-            return this.@base.GetHashCode() ^ this.path.GetHashCode();
+            return this.@base.GetHashCode() ^ this.path.Length.GetHashCode();
         }
         
         // Return the prefix obtained by removing the last item from the type variable's path. If
@@ -466,7 +497,9 @@ namespace schema {
         }
         
         public override bool Equals(object? that) {
-            return that is EdgeLabel other && this.capability == other.capability && this.kind == other.kind;
+            return that is EdgeLabel other &&
+                this.capability == other.capability &&
+                this.kind == other.kind;
         }
         
         public override int GetHashCode() {
@@ -522,7 +555,11 @@ namespace schema {
         }
         
         public override bool Equals(object? that) {
-            return that is Node other && this.@base == other.@base && this.suffix_variance == other.suffix_variance && this._unforgettable == other._unforgettable;
+            var ret = that is Node other &&
+                this.@base == other.@base &&
+                this.suffix_variance == other.suffix_variance &&
+                this._unforgettable == other._unforgettable;
+            return ret;
         }
         
         public override int GetHashCode() {
