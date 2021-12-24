@@ -8,6 +8,8 @@ using networkx;
 using unittest;
 
 */
+
+namespace retypd { 
 using ConstraintSet = schema.ConstraintSet;
 
 using SchemaParser = parser.SchemaParser;
@@ -393,4 +395,5 @@ public static class test_schema {
             Assert.IsTrue(solver.constraints.Contains(SchemaParser.parse_constraint("{tv}.load.σ4@4 ⊑ #FileDescriptor")));
         }
     }
+}
 }

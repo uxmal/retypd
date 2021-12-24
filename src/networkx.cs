@@ -10,6 +10,8 @@ public static class networkx
     {
         internal Dictionary<TItem, NodeInfo> _nodes;
         internal Dictionary<(TItem, TItem), Dictionary<string, object>> _edges;
+        private Dictionary<TItem, List<TItem>> _outEdges;
+        private readonly Dictionary<TItem, List<TItem>> _inEdges;
 
         internal record NodeInfo(
             TItem Item, 
@@ -27,6 +29,8 @@ public static class networkx
         {
             this._nodes = new Dictionary<TItem, NodeInfo>();
             this._edges = new();
+            this._outEdges = new();
+            this._inEdges = new();
             this.graph = new Dictionary<string, object>();
         }
         
@@ -36,6 +40,8 @@ public static class networkx
         {
             this._nodes = new Dictionary<TItem, NodeInfo>(graph._nodes);
             this._edges = new Dictionary<(TItem, TItem), Dictionary<string, object>>(graph._edges);
+            this._outEdges = new Dictionary<TItem, List<TItem>>();
+            this._inEdges = new Dictionary<TItem, List<TItem>>();
             this.graph = new Dictionary<string, object>(graph.graph);
         }
 
@@ -68,6 +74,8 @@ public static class networkx
                 _nodes.Add(v_of_edge, new NodeInfo(v_of_edge));
             var e = (u_of_edge, v_of_edge);
             this._edges.Add(e, attr!);
+            _nodes[u_of_edge].Succ.Add(v_of_edge);
+            _nodes[v_of_edge].Pred.Add(u_of_edge);
         }
 
 
@@ -134,11 +142,13 @@ public static class networkx
 
 
         //An OutEdgeView of the DiGraph as G.edges or G.edges().
-        public OutEdgeView<TItem> edges => new OutEdgeView<TItem>(this._edges);
+        public OutEdgeView<TItem> edges => new OutEdgeView<TItem>(this._edges
+            .Select(g => ( g.Key.Item1, g.Key.Item2))
+            .ToList());
 
 
         //An OutEdgeView of the DiGraph as G.edges or G.edges().
-        public OutEdgeView<TItem> out_edges => throw new NotImplementedException();
+        public OutEdgeView<TItem> out_edges(TItem vertex) => throw new NotImplementedException();
 
 
         //An InEdgeView of the Graph as G.in_edges or G.in_edges().
@@ -263,8 +273,12 @@ public static class networkx
         {
             this.graph = g;
             this.item = item;
-            this.edges = g.edges.Where(e => e.From.Equals(item)).ToList();
+            this.edges = g.edges.Where(e => e.From.Equals(item))
+                .Select(e => (e.From, e.To))
+                .ToList();
         }
+
+        public int Count => edges.Count;
 
         public IEnumerator<TItem> GetEnumerator() =>
             edges.Select(e => e.to).GetEnumerator();
@@ -275,7 +289,9 @@ public static class networkx
 
         public Dictionary<string, object> this[TItem node] => this.graph._edges[(item, node)];
 
-        public TItem get(TItem key) => throw new NotImplementedException();
+        public TItem this[int iSucc] => this.edges[iSucc].to;
+
+        public TItem get(int iEdge) => edges[iEdge].to;
 
         public IEnumerable<KeyValuePair<TItem, Dictionary<string, object>>> items() => throw new NotImplementedException();
 
@@ -330,19 +346,62 @@ public static class networkx
 
     public class OutEdgeView<TItem> : IEnumerable<(TItem From, TItem To)>
     {
-        private Dictionary<(TItem, TItem), Dictionary<string, object>> edges;
+        private List<(TItem, TItem)> edges;
 
-        public OutEdgeView(Dictionary<(TItem, TItem), Dictionary<string, object>> edges)
+        public OutEdgeView(List<(TItem, TItem)> edges)
         {
             this.edges = edges;
         }
 
+        public TItem this[int iSucc] => this.edges[iSucc].Item2;
+
         public IEnumerator<(TItem From, TItem To)> GetEnumerator()
         {
-            return edges.Keys.Select(e => (e.Item1, e.Item2)).GetEnumerator();
+            return edges.GetEnumerator();
         }
 
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+
+    public static List<List<TItem>> scc2<TItem>(DiGraph<TItem> graph) 
+        where TItem : notnull
+    {
+        var result = new List<List<TItem>>();
+        var stack = new Stack<TItem>();
+        var low = new Dictionary<TItem, int>();
+        var call_stack = new Stack<(TItem, int, int)>();
+        foreach (var vv in graph.nodes) {
+            call_stack.Push((vv, 0, low.Count));
+            while (call_stack.Count > 0) {
+                var (v, pi, num) = call_stack.Pop();
+                if (pi == 0) {
+                    if (low.ContainsKey(v)) continue;
+                    low[v] = num;
+                    stack.Push(v);
+                }
+                if (pi > 0) {
+                    low[v] = Math.Min(low[v], low[graph.out_edges(v)[pi - 1]]);
+                }
+                if (pi < graph[v].Count) {
+                    call_stack.Push((v, pi + 1, num));
+                    call_stack.Push((graph[v][pi], 0, low.Count));
+                    continue;
+                }
+                if (num == low[v]) {
+                    var comp = new List<TItem>();
+                    while (true)
+                    {
+                        comp.Append(stack.Pop());
+                        low[comp[^1]] = graph.Count;
+                        if (comp[^1].Equals(v))
+                            break;
+                    }
+                    result.Add(comp);
+                }
+            }
+        }
+        return result;
     }
 
     public static IEnumerable<HashSet<TItem>> strongly_connected_components<TItem>(DiGraph<TItem> G)

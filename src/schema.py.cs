@@ -64,7 +64,7 @@ namespace schema {
     //     by values specific to their subclass. So objects of class A always precede objects of class B
     //     and objects of class A are ordered with respect to each other by :py:method:`_less_than`.
     //     
-    public class AccessPathLabel
+    public abstract class AccessPathLabel
     {
         public static bool operator ==(AccessPathLabel self, AccessPathLabel other)
         {
@@ -101,7 +101,10 @@ namespace schema {
         public virtual bool _less_than(AccessPathLabel _other) {
             return false;
         }
-        
+
+        public abstract override  bool Equals(object? other);
+        public abstract override int GetHashCode();
+
         // Determines if the access path label is covariant or contravariant, per Table 1.
         //         
         public virtual Variance variance() {
