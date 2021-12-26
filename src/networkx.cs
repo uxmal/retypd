@@ -433,33 +433,35 @@ public static class networkx
                         }
                     }
                     if (done)
+                    {
                         lowlink[v] = preorder[v];
-                    foreach (var w in G[v])
-                    {
-                        if (!scc_found.Contains(w))
+                        foreach (var w in G[v])
                         {
-                            if (preorder[w] > preorder[v])
-                                lowlink[v] = Math.Min(lowlink[v], lowlink[w]);
-                            else
-                                lowlink[v] = Math.Min(lowlink[v], preorder[w]);
+                            if (!scc_found.Contains(w))
+                            {
+                                if (preorder[w] > preorder[v])
+                                    lowlink[v] = Math.Min(lowlink[v], lowlink[w]);
+                                else
+                                    lowlink[v] = Math.Min(lowlink[v], preorder[w]);
+                            }
                         }
-                    }
-                    queue.RemoveAt(queue.Count - 1);
-                    if (lowlink[v] == preorder[v])
-                    {
-                        var scc = new HashSet<TItem> { v };
-                        while (scc_queue.Count > 0 && preorder[scc_queue[^1]] > preorder[v])
+                        queue.RemoveAt(queue.Count - 1);
+                        if (lowlink[v] == preorder[v])
                         {
-                            var k = scc_queue[^1];
-                            scc_queue.RemoveAt(scc_queue.Count - 1);
-                            scc.Add(k);
+                            var scc = new HashSet<TItem> { v };
+                            while (scc_queue.Count > 0 && preorder[scc_queue[^1]] > preorder[v])
+                            {
+                                var k = scc_queue[^1];
+                                scc_queue.RemoveAt(scc_queue.Count - 1);
+                                scc.Add(k);
+                            }
+                            scc_found.UnionWith(scc);
+                            yield return scc;
                         }
-                        scc_found.UnionWith(scc);
-                        yield return scc;
-                    }
-                    else
-                    {
-                        scc_queue.Add(v);
+                        else
+                        {
+                            scc_queue.Add(v);
+                        }
                     }
                 }
             }
